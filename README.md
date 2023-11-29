@@ -1,7 +1,7 @@
 # human_collision_risk_estimation
 
 ## 1. 프로젝트 설명
-### 1-1. 수상경력
+### 1-1. 수상 이력
 - WCRC 2023 Data Contest 1위 과학기술정보통신부장관상
 ### 1-2. 개발환경
 - Ubuntu 22.04 Desktop
