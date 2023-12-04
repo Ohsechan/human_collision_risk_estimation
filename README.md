@@ -18,5 +18,5 @@
 ### 2-3. Danger index calculation
 <pre><code>ros2 run realsense_human_tracking human_pcl</code></pre>
 
-### 2-4. Human Pose Estimation
-https://docs.google.com/document/d/1927AtABfKBExAzwcSmCpmuVZfE72IKWgzNLeWiTiSR8/edit
+## 3. 문서
+https://docs.google.com/document/d/1YqBIqOUxnI7RKZ2SeHtM_VViJVNKV7SAQmxj7HR6lik/edit#heading=h.2gazcsgmxkub
