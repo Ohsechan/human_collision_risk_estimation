@@ -5,7 +5,7 @@
 - Ubuntu 22.04 Desktop
 - ROS2 Humble
 - C++ : OpenCV, PCL
-- Python : Yolov8, Pytorch
+- Python : Yolov8, PyTorch
 
 ## 2. 데모 영상
 [![사람의 point cloud data 시각화](http://img.youtube.com/vi/v3hmKNEFw_o/0.jpg)](https://www.youtube.com/watch?v=v3hmKNEFw_o&list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh)
