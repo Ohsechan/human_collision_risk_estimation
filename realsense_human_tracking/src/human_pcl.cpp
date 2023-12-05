@@ -30,6 +30,7 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <iomanip> // for setw, setfill
 
+// Realsesne depth camera의 내부 파라미터 구조
 struct rs2_intrinsics {
     float         ppx;       /**< Horizontal coordinate of the principal point of the image, as a pixel offset from the left edge */
     float         ppy;       /**< Vertical coordinate of the principal point of the image, as a pixel offset from the top edge */
@@ -38,18 +39,22 @@ struct rs2_intrinsics {
     float         coeffs[5]; /**< Distortion coefficients */
 };
 
+// location 및 timestamp
 struct Point {
     float x=0, y=0, z=0, time=0;
 };
 
+// 속도
 struct Velocity {
     float vx=0, vy=0, vz=0;
 };
 
+// 가속도
 struct Acceleration {
     float ax=0, ay=0, az=0;
 };
 
+// PCL 뷰터 초기화 함수
 pcl::visualization::PCLVisualizer::Ptr rgbVis (pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud){
   // --------------------------------------------
   // -----Open 3D viewer and add point cloud-----
@@ -64,6 +69,7 @@ pcl::visualization::PCLVisualizer::Ptr rgbVis (pcl::PointCloud<pcl::PointXYZRGB>
   return (viewer);
 }
 
+// 통계적인 방법으로 Outlier 제거
 void removeOutliers(cv::Mat& mat) {
     // 평균과 표준 편차 계산
     cv::Scalar mean, stddev;
@@ -109,13 +115,14 @@ void removeOutliers(cv::Mat& mat) {
 //     printf("minVal : %f, maxVal : %f\n", minVal, maxVal);
 // }
 
+// 경계선 부분 노이즈 제거 함수
 void removeOutline(cv::Mat& mat) {
     // mat 크기
     cv::Mat clonedMat = mat.clone();
     int rows = clonedMat.rows;
     int cols = clonedMat.cols;
 
-    // 5x5 크기의 커널
+    // 2x2 크기의 커널
     int kernelSize = 2;
     cv::Mat kernel = cv::Mat::zeros(kernelSize, kernelSize, CV_8U);
 
@@ -130,6 +137,7 @@ void removeOutline(cv::Mat& mat) {
     }
 }
 
+// segmentation mask 부분의 depth data만 필터링하는 함수
 cv::Mat human_filter(cv::Mat depth_image_, cv::Mat mat_human){
     cv::Mat result;
     mat_human.convertTo(mat_human, CV_32F);
@@ -137,6 +145,7 @@ cv::Mat human_filter(cv::Mat depth_image_, cv::Mat mat_human){
     return result;
 }
 
+// pixel과 depth 정보를 실제 세계의 3차원 직교좌표계로 변환하는 함수
 static void rs2_deproject_pixel_to_point(pcl::PointXYZRGB& point, const struct rs2_intrinsics * intrin, int pixel_x, int pixel_y, float depth) {
     float x = (pixel_x - intrin->ppx) / intrin->fx;
     float y = (pixel_y - intrin->ppy) / intrin->fy;
@@ -155,6 +164,7 @@ static void rs2_deproject_pixel_to_point(pcl::PointXYZRGB& point, const struct r
     point.b = std::round(255 - 255 * depth / 5);
 }
 
+// point cloud의 평균 위치를 구하는 함수
 Point calculateAverage(const pcl::PointCloud<pcl::PointXYZRGB> pointClouds, int millisec) {
     Point result;
     for (const auto& point : pointClouds.points) {
@@ -170,6 +180,7 @@ Point calculateAverage(const pcl::PointCloud<pcl::PointXYZRGB> pointClouds, int 
     return result;
 }
 
+// vector의 평균을 계산하는 함수
 float calculateAverage(const std::vector<float>& data) {
     if (data.empty()) {
         return 0.0; // 빈 벡터의 경우 0을 반환하거나 예외 처리를 수행할 수 있습니다.
@@ -179,6 +190,7 @@ float calculateAverage(const std::vector<float>& data) {
     return std::accumulate(data.begin(), data.end(), 0.0) / data.size();
 }
 
+// 평균 속도를 계산하는 함수
 Velocity calculateVelocity(const Point& p1, const Point& p2) {
     Velocity v;
     v.vx = (p2.x - p1.x) / (p2.time - p1.time) * 1000; // meterpersec
@@ -187,6 +199,7 @@ Velocity calculateVelocity(const Point& p1, const Point& p2) {
     return v;
 }
 
+// 평균 가속도를 계산하는 함수
 Acceleration calculateAcceleration(const Velocity& v1, const Velocity& v2, float time) {
     Acceleration a;
     a.ax = (v2.vx - v1.vx) / time * 1000; // meterpersec^2
@@ -195,8 +208,10 @@ Acceleration calculateAcceleration(const Velocity& v1, const Velocity& v2, float
     return a;
 }
 
+// Node 정의
 class DistNode : public rclcpp::Node {
     public:
+        // publisher 및 subscriber 정의
         DistNode() : Node("dist_node") {
             camera_info_subscriber_ = create_subscription<sensor_msgs::msg::CameraInfo>(
                 "/camera/depth/camera_info",
@@ -222,6 +237,7 @@ class DistNode : public rclcpp::Node {
         }
 
     private:
+        // 클래스에서 사용할 변수 정의
         rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_subscriber_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_subscription_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_subscription_;
@@ -241,6 +257,7 @@ class DistNode : public rclcpp::Node {
         int now_time2 = 0;
         std::vector<float> processTime;
 
+        // timestamp에 해당하는 depth data를 찾는 함수 (unused)
         int return_depth_image_index(const int millisec){
             auto it = std::find(depth_image_time_stamp_deque.begin(), depth_image_time_stamp_deque.end(), millisec);
             if (it != depth_image_time_stamp_deque.end()) {
@@ -250,6 +267,7 @@ class DistNode : public rclcpp::Node {
             }
         }
 
+        // color image를 color_image_ 변수에 저장하는 함수
         void colorImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
             color_image_.create(msg->height, msg->width, CV_8UC3);
             color_image_.data = const_cast<unsigned char *>(msg->data.data());
@@ -257,6 +275,7 @@ class DistNode : public rclcpp::Node {
             cv::cvtColor(color_image_, color_image_, cv::COLOR_RGB2BGR);
         }
 
+        // camera의 intrinsic parameter를 받아오는 함수
         void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
             intrinsics.ppx = msg->k[2];
             intrinsics.ppy = msg->k[5];
@@ -269,6 +288,7 @@ class DistNode : public rclcpp::Node {
             intrinsics.coeffs[4] = msg->d[4];
         }
 
+        // depth data와 timestamp를 deque에 저장하는 함수
         void depthImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
             cv_ptr = cv_bridge::toCvCopy(msg);
             depth_image_ = cv_ptr->image;
@@ -288,6 +308,7 @@ class DistNode : public rclcpp::Node {
             now_time2 = (this->now().nanoseconds() / 1000000) % 1000000000;
         }
 
+        // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
         void segCallback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
             int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
             // 현재 시간 출력
@@ -490,6 +511,7 @@ class DistNode : public rclcpp::Node {
         // }
 };
 
+// 노드 활성화
 int main(int argc, char *argv[]) {
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<DistNode>());
