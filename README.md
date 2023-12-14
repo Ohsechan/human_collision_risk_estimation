@@ -21,7 +21,7 @@
 ![wcrc timeline diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/a3fde8ac-6f08-4347-90e3-7b9359ed1cf2)
 
 ### 2-2. 영상
-[![image](http://img.youtube.com/vi/iGWLFeSuKdA/0.jpg)](https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh)
+[![image](http://img.youtube.com/vi/GwNal6DAgPs/0.jpg)](https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh)
 
 ## 3. 실행 방법
 
