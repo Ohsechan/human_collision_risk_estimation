@@ -13,15 +13,19 @@
 - Realsense D435i
 
 ## 2. 프로젝트 구현
-### 2-1. 사진
+### 2-1. 데모 영상
+[![youtube playlist](http://img.youtube.com/vi/GwNal6DAgPs/0.jpg)](https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh)
+### 2-2. 시스템 구성도
 ![wcrc system diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/32f93bea-47a4-48eb-9c44-dbe96715c17e)
+### 2-3. 순서도
 ![wcrc sequence diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/6c6a911b-6b02-4e31-898d-8687dbfaaad2)
+### 2-4. 노드 기준 연산시간
 ![wcrc node diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/8129fad9-134b-4b58-b76d-dce48ac6a74a)
+### 2-5. 위치 및 시간 자료구조
 ![wcrc data store diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/8bc5d9e8-512d-426c-96a5-178b2d8267c5)
+### 2-6. 실시간 위치 예측
 ![wcrc timeline diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/a3fde8ac-6f08-4347-90e3-7b9359ed1cf2)
 
-### 2-2. 영상
-[![image](http://img.youtube.com/vi/GwNal6DAgPs/0.jpg)](https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh)
 
 ## 3. 실행 방법
 
