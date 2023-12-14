@@ -21,7 +21,7 @@
 ![wcrc timeline diagram drawio](https://github.com/Ohsechan/human_collision_risk_estimation/assets/77317210/a3fde8ac-6f08-4347-90e3-7b9359ed1cf2)
 
 ### 2-2. 영상
-[![사람의 point cloud data 시각화](http://img.youtube.com/vi/v3hmKNEFw_o/0.jpg)]([https://www.youtube.com/watch?v=v3hmKNEFw_o&list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh](https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh))
+https://www.youtube.com/playlist?list=PLx5EbqT-6Y08K1ZaK8a7qJ8qOc2PsTDvh
 
 ## 3. 실행 방법
 
