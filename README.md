@@ -25,8 +25,10 @@
 
 ## 3. 실행 방법
 
-### 3-1. Turn on the realsense camera
-<pre><code>ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30</code></pre>
+<pre><code>
+  # Turn on the realsense camera
+  ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30
+</code></pre>
 
 ### 3-2. Human pose estimation LSTM + Seg
 <pre><code>ros2 launch depth_example merge_lstm_seg.launch.py</code></pre>
