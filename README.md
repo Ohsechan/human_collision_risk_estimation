@@ -10,7 +10,7 @@
 ### 1-4. 개발환경
 - Ubuntu 22.04 Desktop
 - ROS2 Humble
-- C++ :  realsense-ros, OpenCV, PCL
+- C++ :  Realsense SDK, OpenCV, PCL
 - Python : Yolov8, PyTorch
 ### 1-5. 하드웨어
 - Realsense D435i
