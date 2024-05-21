@@ -11,7 +11,7 @@
 - Ubuntu 22.04 Desktop
 - ROS2 Humble
 - C++ :  Realsense SDK, OpenCV, PCL
-- Python : Yolov8, PyTorch
+- Python : Yolov8, PyTorch, tensorflow
 ### 1-5. 하드웨어
 - Realsense D435i
 
