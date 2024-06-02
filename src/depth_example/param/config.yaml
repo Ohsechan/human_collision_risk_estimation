@@ -13,6 +13,7 @@ detect_pose_node:
     rgb_topic: "/camera/color/image_raw"
     conf: 0.6
     device: "cuda:0"
+    log_level: WARN
 
 detect_seg_node:
   ros__parameters:

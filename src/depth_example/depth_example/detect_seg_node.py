@@ -45,7 +45,6 @@ class DetectSegNode(Node):
             x1, y1, x2, y2 = map(round, [x1, y1, x2, y2])
 
             tracking_box.extend([int(person_tracking.boxes[idx].id[0]), x1, y1, x2, y2])
-
             tracking_seg.extend([(msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000] + person_tracking.masks.data[idx].cpu().numpy().astype(np.uint8).flatten().tolist())
 
             cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 0, 255), 4)
