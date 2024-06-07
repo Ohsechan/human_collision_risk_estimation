@@ -111,16 +111,16 @@ class DetectLSTMSegNode(Node):
                 if xyn.size == 0:
                     continue
 
-                # id
-                id = int(person.boxes.id.item())
+                id = int(person.boxes.id.item()) # id 값 받아오기
+                # id에 해당하는 저장공간 확보
                 while(len(frame_keypoints_xyn) < id):
                     frame_keypoints_xyn.append([])
-                # 
+                # 각 id마다 길이가 10이 넘지 않도록 과거 데이터 삭제 후 현재 데이터 추가
                 if len(frame_keypoints_xyn[id-1]) == 10:
                     frame_keypoints_xyn[id-1] = frame_keypoints_xyn[id-1][1:]
                 frame_keypoints_xyn[id-1].append(flattened_xyn)
 
-                # 
+                # id와 keypoints를 id_keypoints 리스트에 저장
                 id_keypionts.append(id)
                 flattened_xy = [int(point)-1 for sublist in keypoints.xy.cpu().tolist()[0] for point in sublist]
                 id_keypionts.extend(flattened_xy)
