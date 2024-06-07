@@ -150,6 +150,14 @@ class DetectLSTMSegNode(Node):
                         else: # stand
                             xykey = Int32MultiArray()
                             xykey.data = [(msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000] + id_keypionts
+                            '''
+                            xykey format description
+                                time stamp (millisecond),
+                                id, keypoints.xy,
+                                id, keypoints.xy,
+                                id, keypoints.xy,
+                                ...
+                            '''
                             self.seg_publisher.publish(xykey)
                             # print("stand")
 
