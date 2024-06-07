@@ -255,17 +255,43 @@ class DistNode : public rclcpp::Node {
         int now_time = 0;
         std::vector<float> flight_time, cycle_time;
         int now_time2 = 0;
-        std::vector<float> processTime;
+        std::vector<int> processTime;
+        std::deque<double> color_timestamp; // for sync color with depth
+        std::deque<double> depth_timestamp; // for sync depth with color
 
-        // timestamp에 해당하는 depth data를 찾는 함수 (unused)
-        int return_depth_image_index(const int millisec){
-            auto it = std::find(depth_image_time_stamp_deque.begin(), depth_image_time_stamp_deque.end(), millisec);
-            if (it != depth_image_time_stamp_deque.end()) {
-                return std::distance(depth_image_time_stamp_deque.begin(), it);
-            } else {
-                return -1;
+        void calc_processtime(int now_time) {
+            processTime.push_back((this->now().nanoseconds() / 1000000) % 1000000000 - now_time);
+            if (processTime.size() == 1000){
+                const std::string filename = "processTime.txt";
+                std::ofstream outFile(filename);
+                if (!outFile.is_open()) {
+                    std::cerr << "파일을 열 수 없습니다." << std::endl;
+                    return;
+                }
+                for (const auto& value : processTime) {
+                    outFile << value << std::endl;
+                }
+                outFile.close();
+                printf("%dms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time);
             }
         }
+
+        // void calc_sync_time(int now_time) {
+        //     for (size_t i = 0; i < myDeque.size(); ++i) {}
+        //     if (processTime.size() == 1000){
+        //         const std::string filename = "processTime.txt";
+        //         std::ofstream outFile(filename);
+        //         if (!outFile.is_open()) {
+        //             std::cerr << "파일을 열 수 없습니다." << std::endl;
+        //             return;
+        //         }
+        //         for (const auto& value : processTime) {
+        //             outFile << value << std::endl;
+        //         }
+        //         outFile.close();
+        //         printf("%f\n", ((this->now().nanoseconds() / 1000000) % 1000000000 - now_time) / 1000.0);
+        //     }
+        // }
 
         // color image를 color_image_ 변수에 저장하는 함수
         void colorImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
@@ -311,6 +337,8 @@ class DistNode : public rclcpp::Node {
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
         void segCallback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
             int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
+            calc_processtime(now_time3);
+            return; // todo: sync 끝나면 이거 열기
             // 현재 시간 출력
             // rclcpp::Time now = clock_->now();
             // RCLCPP_INFO(this->get_logger(), "현재 시간: %ld.%ld", now.seconds(), now.nanoseconds());

@@ -78,11 +78,6 @@ class DetectLSTMSegNode(Node):
             '/lstm_pose_seg',
             10
         )
-        self.box_publisher = self.create_publisher(
-            Int32MultiArray,
-            '/person_box_tracking',
-            10
-        )
         self.seg_publisher = self.create_publisher(
             Int32MultiArray,
             '/person_seg_tracking',
@@ -105,8 +100,7 @@ class DetectLSTMSegNode(Node):
         #     print(i)
         # print()
 
-        # print(results[0].boxes.id)
-
+        id_keypionts = [] # for publish bounding box
         for person in results[0]:
             try:
                 keypoints = person.keypoints
@@ -117,12 +111,19 @@ class DetectLSTMSegNode(Node):
                 if xyn.size == 0:
                     continue
 
+                # id
                 id = int(person.boxes.id.item())
                 while(len(frame_keypoints_xyn) < id):
                     frame_keypoints_xyn.append([])
+                # 
                 if len(frame_keypoints_xyn[id-1]) == 10:
                     frame_keypoints_xyn[id-1] = frame_keypoints_xyn[id-1][1:]
                 frame_keypoints_xyn[id-1].append(flattened_xyn)
+
+                # 
+                id_keypionts.append(id)
+                flattened_xy = [int(point)-1 for sublist in keypoints.xy.cpu().tolist()[0] for point in sublist]
+                id_keypionts.extend(flattened_xy)
 
                 # LSTM 모델을 사용하여 예측
                 if len(frame_keypoints_xyn[id-1]) > 0:
@@ -131,7 +132,7 @@ class DetectLSTMSegNode(Node):
                     # 3-D 텐서로 입력 데이터 조정
                     new_data = torch.FloatTensor(new_data)  # (sequence_length, input_size)
                     new_data = new_data.unsqueeze(0)  # (1, sequence_length, input_size)
-x
+
                     if new_data.size(-1) == input_size: # 입력 데이터의 차원이 맞는지 확인
                         lstm_prediction = loaded_model(new_data)
 
@@ -142,15 +143,14 @@ x
 
                         # 예측 결과 출력
                         # print("LSTM 모델 예측 결과 (클래스 확률):", class_probabilities_numpy)
-                        if (class_probabilities_numpy[0][1] < 0.6).any():
-                            msg = Int32MultiArray()
-                            msg.data = [0] # 'sit'
-                            self.box_publisher.publish(msg)
+                        if (class_probabilities_numpy[0][1] < 0.6).any(): # sit
+                            xykey = Int32MultiArray()
+                            xykey.data = [0] # 'sit'
                             # print("sit")
-                        else:
-                            msg = Int32MultiArray()
-                            msg.data = [1] # 'stand'
-                            self.seg_publisher.publish(msg)
+                        else: # stand
+                            xykey = Int32MultiArray()
+                            xykey.data = [(msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000] + id_keypionts
+                            self.seg_publisher.publish(xykey)
                             # print("stand")
 
             except IndexError as e :
