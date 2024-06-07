@@ -255,12 +255,10 @@ class DistNode : public rclcpp::Node {
         int now_time = 0;
         std::vector<float> flight_time, cycle_time;
         int now_time2 = 0;
-        std::vector<int> processTime;
-        std::deque<double> color_timestamp; // for sync color with depth
-        std::deque<double> depth_timestamp; // for sync depth with color
+        std::vector<int> processTime; // for calculate process time
 
-        void calc_processtime(int now_time) {
-            processTime.push_back((this->now().nanoseconds() / 1000000) % 1000000000 - now_time);
+        void calc_processtime(int now_time_input) {
+            processTime.push_back((this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
             if (processTime.size() == 1000){
                 const std::string filename = "processTime.txt";
                 std::ofstream outFile(filename);
@@ -272,26 +270,13 @@ class DistNode : public rclcpp::Node {
                     outFile << value << std::endl;
                 }
                 outFile.close();
-                printf("%dms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time);
+                printf("%ldms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
             }
         }
 
-        // void calc_sync_time(int now_time) {
-        //     for (size_t i = 0; i < myDeque.size(); ++i) {}
-        //     if (processTime.size() == 1000){
-        //         const std::string filename = "processTime.txt";
-        //         std::ofstream outFile(filename);
-        //         if (!outFile.is_open()) {
-        //             std::cerr << "파일을 열 수 없습니다." << std::endl;
-        //             return;
-        //         }
-        //         for (const auto& value : processTime) {
-        //             outFile << value << std::endl;
-        //         }
-        //         outFile.close();
-        //         printf("%f\n", ((this->now().nanoseconds() / 1000000) % 1000000000 - now_time) / 1000.0);
-        //     }
-        // }
+        int return_millisecond(int sec, int nanosec){
+            return (sec % 1000000) * 1000 + nanosec / 1000000; // 9자리 millisecond 반환
+        }
 
         // color image를 color_image_ 변수에 저장하는 함수
         void colorImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
@@ -320,7 +305,7 @@ class DistNode : public rclcpp::Node {
             depth_image_ = cv_ptr->image;
             depth_image_.convertTo(depth_image_, CV_32F);
 
-            const int depth_image_deque_size = 3;
+            const int depth_image_deque_size = 15;
             if (depth_image_deque.size() >= depth_image_deque_size){
                 depth_image_deque.pop_front();
                 depth_image_time_stamp_deque.pop_front();
@@ -336,17 +321,29 @@ class DistNode : public rclcpp::Node {
 
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
         void segCallback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
-            int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
-            calc_processtime(now_time3);
+            if (depth_image_.rows <= 0) {
+                return;
+            }
+            std::vector<int> tmp = msg->data;
+
+            while(!depth_image_time_stamp_deque.empty() && tmp[0] - depth_image_time_stamp_deque.front() > 0){
+                printf("Erased!\n");
+                depth_image_deque.pop_front();
+                depth_image_time_stamp_deque.pop_front();
+            }
+            if(depth_image_time_stamp_deque.empty()){
+                return;
+            }
+            printf("seg - depth: %d\n", tmp[0] - depth_image_time_stamp_deque.front());
+            depth_image_deque.pop_front();
+            depth_image_time_stamp_deque.pop_front();
+            // int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
+            // calc_processtime(now_time3);
             return; // todo: sync 끝나면 이거 열기
             // 현재 시간 출력
             // rclcpp::Time now = clock_->now();
             // RCLCPP_INFO(this->get_logger(), "현재 시간: %ld.%ld", now.seconds(), now.nanoseconds());
 
-            if (depth_image_.rows <= 0) {
-                return;
-            }
-            std::vector<int> tmp = msg->data;
             unsigned int len = depth_image_.rows * depth_image_.cols + 1;
             unsigned int count = tmp.size() / len;
 
@@ -359,16 +356,7 @@ class DistNode : public rclcpp::Node {
                 mat_human = mat_human.reshape(1, depth_image_.rows);
                 // removeOutline(mat_human);
                 // printf("time gap : %f\n", ((this->now().nanoseconds() / 1000000) % 1000000000 - millisec) / 1000.0);
-                // int time_sinc = return_depth_image_index(millisec);
                 cv::Mat result;
-                // if (time_sinc == -1){
-                //     printf("-1!!\n");
-                //     result = human_filter(depth_image_, mat_human);
-                // }
-                // else{
-                //     // printf("check\n");
-                //     result = human_filter(depth_image_deque[time_sinc], mat_human);
-                // }
                 if (depth_image_deque.size() >= 3){
                     result = human_filter(depth_image_deque[depth_image_deque.size() - 1], mat_human);
                 }
