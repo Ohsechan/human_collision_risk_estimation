@@ -111,6 +111,9 @@ class DetectLSTMSegNode(Node):
                 if xyn.size == 0:
                     continue
 
+                # 예외처리 : id 없는 경우
+                if (person.boxes.id == None):
+                    continue
                 id = int(person.boxes.id.item()) # id 값 받아오기
                 # id에 해당하는 저장공간 확보
                 while(len(frame_keypoints_xyn) < id):
