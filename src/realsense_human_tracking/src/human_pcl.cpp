@@ -30,6 +30,9 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <iomanip> // for setw, setfill
 
+// Parameters
+const int OLD_DATA_REFERENCE_TIME = 1000; // Unit: ms
+
 // Realsesne depth camera의 내부 파라미터 구조
 struct rs2_intrinsics {
     float         ppx;       /**< Horizontal coordinate of the principal point of the image, as a pixel offset from the left edge */
@@ -41,12 +44,14 @@ struct rs2_intrinsics {
 
 // location 및 timestamp
 struct Point {
-    float x=0, y=0, z=0, time=0;
+    float x=0, y=0, z=0;
+    int time=0;
 };
 
 // 속도
 struct Velocity {
     float vx=0, vy=0, vz=0;
+    int time=0;
 };
 
 // 가속도
@@ -105,15 +110,6 @@ void removeOutliers(cv::Mat& mat) {
     cv::meanStdDev(mat, mean, stddev, nonZeroMask);
     // printf("mean : %f, stddev : %f, goal : %f, thres : %f\n", mean[0], stddev[0], std::pow(mean[0], 1.27) / 10.5, threshold);
 }
-
-// void minmax(cv::Mat& mat) {
-//     float minVal, maxVal;
-//     cv::Point minLoc, maxLoc;
-
-//     cv::minMaxLoc(mat, &minVal, &maxVal, &minLoc, &maxLoc);
-
-//     printf("minVal : %f, maxVal : %f\n", minVal, maxVal);
-// }
 
 // 경계선 부분 노이즈 제거 함수
 void removeOutline(cv::Mat& mat) {
@@ -219,7 +215,7 @@ class DistNode : public rclcpp::Node {
                 std::bind(&DistNode::cameraInfoCallback, this, std::placeholders::_1)
             );
             depth_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
-                "/camera/depth/image_rect_raw",
+                "/camera/aligned_depth_to_color/image_raw",
                 10,
                 std::bind(&DistNode::depthImageCallback, this, std::placeholders::_1)
             );
@@ -246,9 +242,11 @@ class DistNode : public rclcpp::Node {
         cv_bridge::CvImagePtr cv_ptr;
         cv::Mat color_image_;
         cv::Mat depth_image_;
-        std::deque<Point> xyzt_deque;
         std::deque<cv::Mat> depth_image_deque;
         std::deque<int> depth_image_time_stamp_deque;
+        std::deque<Point> xyzt_deque;
+        std::vector<std::vector<std::deque<Point>>> id_keypoint_xyzt_vector;
+        std::vector<std::vector<std::deque<Velocity>>> id_keypoint_velocity_vector;
         rs2_intrinsics intrinsics;
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr point_cloud_ptr = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
         pcl::visualization::PCLVisualizer::Ptr viewer = rgbVis(point_cloud_ptr);
@@ -270,12 +268,45 @@ class DistNode : public rclcpp::Node {
                     outFile << value << std::endl;
                 }
                 outFile.close();
-                printf("%ldms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
+                printf("%dms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
             }
         }
 
         int return_millisecond(int sec, int nanosec){
             return (sec % 1000000) * 1000 + nanosec / 1000000; // 9자리 millisecond 반환
+        }
+
+        // pixel과 depth 정보를 실제 세계의 3차원 직교좌표계로 변환하는 함수
+        Point rs2_deproject_pixel_to_point_modified(const struct rs2_intrinsics * intrin, int pixel_x, int pixel_y, float depth, int timestamp) {
+            float x = (pixel_x - intrin->ppx) / intrin->fx;
+            float y = (pixel_y - intrin->ppy) / intrin->fy;
+            // if Distortion Model == Brown Conrady
+            float r2  = x*x + y*y;
+            float f = 1 + intrin->coeffs[0]*r2 + intrin->coeffs[1]*r2*r2 + intrin->coeffs[4]*r2*r2*r2;
+            float ux = x*f + 2*intrin->coeffs[2]*x*y + intrin->coeffs[3]*(r2 + 2*x*x);
+            float uy = y*f + 2*intrin->coeffs[3]*x*y + intrin->coeffs[2]*(r2 + 2*y*y);
+            x = ux;
+            y = uy;
+            Point point;
+            point.x = x;
+            point.y = y;
+            point.z = depth;
+            point.time = timestamp;
+            return point;
+        }
+
+        Velocity calculateVelocity(const Point& p1, const Point& p2) {
+            Velocity vel;
+            int deltaTime = p2.time - p1.time;
+            if (deltaTime == 0) {
+                std::cerr << "Error: The time difference between points is zero." << std::endl;
+                return vel; // Return default velocity
+            }
+            vel.vx = (p2.x - p1.x) / deltaTime;
+            vel.vy = (p2.y - p1.y) / deltaTime;
+            vel.vz = (p2.z - p1.z) / deltaTime;
+            vel.time = p2.time;
+            return vel;
         }
 
         // color image를 color_image_ 변수에 저장하는 함수
@@ -321,33 +352,89 @@ class DistNode : public rclcpp::Node {
 
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
         void segCallback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
+            // int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
+            // calc_processtime(now_time3);
             if (depth_image_.rows <= 0) {
                 return;
             }
             std::vector<int> tmp = msg->data;
+            const int sync_time = tmp[0];
+            const int len = 35; // 1(id) + 34(keypoints.xy)
+            const int count = (tmp.size() - 1) / len;
 
-            while(!depth_image_time_stamp_deque.empty() && tmp[0] - depth_image_time_stamp_deque.front() > 0){
-                printf("Erased!\n");
+            // keypoints data have to synchronize with depth image
+            while(!depth_image_time_stamp_deque.empty() && sync_time - depth_image_time_stamp_deque.front() > 0){
+                // printf("Erased!\n");
                 depth_image_deque.pop_front();
                 depth_image_time_stamp_deque.pop_front();
             }
-            if(depth_image_time_stamp_deque.empty()){
+
+            // fail when depth_image_time_stamp_deque is empty
+            if (depth_image_time_stamp_deque.empty()) {
                 return;
             }
-            printf("seg - depth: %d\n", tmp[0] - depth_image_time_stamp_deque.front());
+            // printf("seg - depth: %d\n", sync_time - depth_image_time_stamp_deque.front());
+            // cout << "rows: " << depth_image_deque.front().rows << ", cols: " << depth_image_deque.front().cols << "\n";
+            cv::Mat depth_image_tmp = depth_image_deque.front();
             depth_image_deque.pop_front();
             depth_image_time_stamp_deque.pop_front();
-            // int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
-            // calc_processtime(now_time3);
-            return; // todo: sync 끝나면 이거 열기
-            // 현재 시간 출력
-            // rclcpp::Time now = clock_->now();
-            // RCLCPP_INFO(this->get_logger(), "현재 시간: %ld.%ld", now.seconds(), now.nanoseconds());
 
-            unsigned int len = depth_image_.rows * depth_image_.cols + 1;
-            unsigned int count = tmp.size() / len;
+            // 각 id마다 새로운 xyzt 정보 추가
+            for (size_t i = 0; i < count; i++) {
+                // id 값 구하기
+                int id = tmp[ 1 + len * i ];
+                // id에 해당하는 저장공간 확보
+                while (id_keypoint_xyzt_vector.size() < id){
+                    id_keypoint_xyzt_vector.emplace_back(17);
+                    id_keypoint_velocity_vector.emplace_back(17);
+                }
+                // printf("total: %d\neach: %d\n", id_keypoint_xyzt_vector.size(), id_keypoint_xyzt_vector[id-1].size());
 
-            for (size_t i = 1; i <= count; i++) {
+                // 각 keypoint마다 xyzt 데이터 추가
+                for (int j = 0; j < 17; j++) {
+                    // OLD_DATA_REFERENCE_TIME ms 이상 차이나는 데이터 삭제하기
+                    while (!id_keypoint_xyzt_vector[id-1][j].empty() && sync_time - id_keypoint_xyzt_vector[id-1][j].front().time > OLD_DATA_REFERENCE_TIME) {
+                        // printf("Ereased: %dms, %d left\n", sync_time - id_keypoint_xyzt_vector[id-1][j].front().time, id_keypoint_xyzt_vector[id-1][j].size());
+                        id_keypoint_xyzt_vector[id-1][j].pop_front();
+                    }
+                    while (!id_keypoint_velocity_vector[id-1][j].empty() && sync_time - id_keypoint_velocity_vector[id-1][j].front().time > OLD_DATA_REFERENCE_TIME) {
+                        id_keypoint_velocity_vector[id-1][j].pop_front();
+                    }
+                    int x = tmp[ 2 + len * i + j * 2], y = tmp[ 3 + len * i + j * 2];
+
+                    // keypoint가 있는지 체크
+                    if ( x < 0 || y < 0 ) {
+                        continue;
+                    }
+                    // depth가 있는지 체크
+                    int depth = depth_image_tmp.at<float>(y, x); // 단위: mm
+                    if (depth < 1) {
+                        continue;
+                    }
+
+                    // 새로운 xyzt 데이터
+                    Point new_point = rs2_deproject_pixel_to_point_modified(&intrinsics, x, y, depth, sync_time);
+                    // Velocity 계산
+                    if (id_keypoint_xyzt_vector[id-1][j].size() > 0) {
+                        id_keypoint_velocity_vector[id-1][j].push_back(calculateVelocity(id_keypoint_xyzt_vector[id-1][j].back(), new_point));
+                        // std::cout << "Velocity: (" 
+                        //         << id_keypoint_velocity_vector[id-1][j].back().vx << ", " 
+                        //         << id_keypoint_velocity_vector[id-1][j].back().vy << ", " 
+                        //         << id_keypoint_velocity_vector[id-1][j].back().vz << ", " 
+                        //         << id_keypoint_velocity_vector[id-1][j].back().time << ")\n";
+                    }
+                    // 새로운 xyzt 데이터 추가 <todo: x, y deprojection 이후의 단위 알아보기>
+                    id_keypoint_xyzt_vector[id-1][j].push_back(new_point);
+                    // // 확인을 위해 deque의 최근 요소 출력
+                    // std::cout << "Point: (" 
+                    //         << id_keypoint_xyzt_vector[id-1][j].back().x << ", " 
+                    //         << id_keypoint_xyzt_vector[id-1][j].back().y << ", " 
+                    //         << id_keypoint_xyzt_vector[id-1][j].back().z << ", " 
+                    //         << id_keypoint_xyzt_vector[id-1][j].back().time << ")\n";
+
+                }
+                return;
+                
                 int millisec = tmp[len * (i - 1)];
                 // printf("%d\n", millisec);
                 std::vector<int> human(tmp.begin() + len * (i - 1) + 1, tmp.begin() + len * i);
