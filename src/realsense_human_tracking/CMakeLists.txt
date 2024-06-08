@@ -19,6 +19,15 @@ find_package(sensor_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/RiskScore.msg"
+  "msg/RiskScoreArray.msg"
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+
 include_directories(${PCL_INCLUDE_DIRS} include)
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
@@ -51,6 +60,7 @@ ament_target_dependencies( human_pcl
   sensor_msgs
   OpenCV
   cv_bridge
+  rosidl_default_generators
 )
 add_executable(color_image src/color_image.cpp)
 ament_target_dependencies(color_image rclcpp std_msgs sensor_msgs OpenCV cv_bridge)

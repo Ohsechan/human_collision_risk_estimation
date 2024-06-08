@@ -13,6 +13,9 @@
 #include "rclcpp/clock.hpp"
 #include <fstream>
 
+// #include <realsense_human_tracking/msg/risk_score.hpp>
+// #include "realsense_human_tracking/msg/risk_score_array.hpp"
+
 #include <pcl/common/angles.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/io/pcd_io.h>
@@ -32,6 +35,8 @@
 
 // Parameters
 const int OLD_DATA_REFERENCE_TIME = 1000; // Unit: ms
+const int COLLISION_REFERENCE_TIME = 10000; // Unit: ms
+const int COLLISION_REFERENCE_DISTANCE = 1000; // Unit: mm
 
 // Realsesne depth camera의 내부 파라미터 구조
 struct rs2_intrinsics {
@@ -52,6 +57,12 @@ struct Point {
 struct Velocity {
     float vx=0, vy=0, vz=0;
     int time=0;
+};
+
+// Risk score
+struct RiskScore {
+    int id=0;
+    float risk_score = 0, collision_time=0, distance=0, velocity = 0;
 };
 
 // 가속도
@@ -245,6 +256,7 @@ class DistNode : public rclcpp::Node {
         std::deque<cv::Mat> depth_image_deque;
         std::deque<int> depth_image_time_stamp_deque;
         std::deque<Point> xyzt_deque;
+        std::vector<RiskScore> risk_list;
         std::vector<std::vector<std::deque<Point>>> id_keypoint_xyzt_vector;
         std::vector<std::vector<std::deque<Velocity>>> id_keypoint_velocity_vector;
         rs2_intrinsics intrinsics;
@@ -288,14 +300,14 @@ class DistNode : public rclcpp::Node {
             x = ux;
             y = uy;
             Point point;
-            point.x = x;
-            point.y = y;
+            point.x = x * depth;
+            point.y = y * depth;
             point.z = depth;
             point.time = timestamp;
             return point;
         }
 
-        Velocity calculateVelocity(const Point& p1, const Point& p2) {
+        Velocity calculate_velocity(const Point p1, const Point p2) {
             Velocity vel;
             int deltaTime = p2.time - p1.time;
             if (deltaTime == 0) {
@@ -307,6 +319,64 @@ class DistNode : public rclcpp::Node {
             vel.vz = (p2.z - p1.z) / deltaTime;
             vel.time = p2.time;
             return vel;
+        }
+
+        Point calculate_average_point(const std::vector<std::deque<Point>> point_vector) {
+            Point average;
+            for (const auto& points : point_vector) {
+                for (const auto& point : points) {
+                    average.x += point.x;
+                    average.y += point.y;
+                    average.z += point.z;
+                    average.time++;
+                }
+            }
+
+            average.x /= average.time;
+            average.y /= average.time;
+            average.z /= average.time;
+
+            return average;
+        }
+
+        Velocity calculate_average_velocity(const std::vector<std::deque<Velocity>> velocity_vector) {
+            Velocity average;
+            for (const auto& velocities : velocity_vector) {
+                for (const auto& velocity : velocities) {
+                    average.vx += velocity.vx;
+                    average.vy += velocity.vy;
+                    average.vz += velocity.vz;
+                    average.time++;
+                }
+            }
+
+            average.vx /= average.time;
+            average.vy /= average.time;
+            average.vz /= average.time;
+
+            return average;
+        }
+
+        std::vector<float> find_closest_time_distance(const Point loc, const Velocity vel) {
+            // Calculate the dot product of loc and vel
+            float dot_product = loc.x * vel.vx + loc.y * vel.vy + loc.z * vel.vz;
+            
+            // Calculate the magnitude squared of the velocity vector
+            float vel_magnitude_squared = vel.vx * vel.vx + vel.vy * vel.vy + vel.vz * vel.vz;
+            
+            // Calculate the parameter t that minimizes the distance
+            float t = -dot_product / vel_magnitude_squared;
+            
+            // Calculate the closest point on the line
+            float closest_x = loc.x + t * vel.vx;
+            float closest_y = loc.y + t * vel.vy;
+            float closest_z = loc.z + t * vel.vz;
+            
+            // Calculate the distance from (0, 0, 0) to the closest point
+            float distance = std::sqrt(closest_x * closest_x + closest_y * closest_y + closest_z * closest_z);
+            
+            // Return the closest time and the distance
+            return {t, distance};
         }
 
         // color image를 color_image_ 변수에 저장하는 함수
@@ -400,6 +470,7 @@ class DistNode : public rclcpp::Node {
                     while (!id_keypoint_velocity_vector[id-1][j].empty() && sync_time - id_keypoint_velocity_vector[id-1][j].front().time > OLD_DATA_REFERENCE_TIME) {
                         id_keypoint_velocity_vector[id-1][j].pop_front();
                     }
+                    // pixel 좌표 가져오기
                     int x = tmp[ 2 + len * i + j * 2], y = tmp[ 3 + len * i + j * 2];
 
                     // keypoint가 있는지 체크
@@ -416,7 +487,8 @@ class DistNode : public rclcpp::Node {
                     Point new_point = rs2_deproject_pixel_to_point_modified(&intrinsics, x, y, depth, sync_time);
                     // Velocity 계산
                     if (id_keypoint_xyzt_vector[id-1][j].size() > 0) {
-                        id_keypoint_velocity_vector[id-1][j].push_back(calculateVelocity(id_keypoint_xyzt_vector[id-1][j].back(), new_point));
+                        id_keypoint_velocity_vector[id-1][j].push_back(calculate_velocity(id_keypoint_xyzt_vector[id-1][j].back(), new_point));
+                        // // 확인을 위해 최근 Velocity 출력
                         // std::cout << "Velocity: (" 
                         //         << id_keypoint_velocity_vector[id-1][j].back().vx << ", " 
                         //         << id_keypoint_velocity_vector[id-1][j].back().vy << ", " 
@@ -425,13 +497,30 @@ class DistNode : public rclcpp::Node {
                     }
                     // 새로운 xyzt 데이터 추가 <todo: x, y deprojection 이후의 단위 알아보기>
                     id_keypoint_xyzt_vector[id-1][j].push_back(new_point);
-                    // // 확인을 위해 deque의 최근 요소 출력
+                    // // 확인을 위해 최근 Point 출력
                     // std::cout << "Point: (" 
                     //         << id_keypoint_xyzt_vector[id-1][j].back().x << ", " 
                     //         << id_keypoint_xyzt_vector[id-1][j].back().y << ", " 
                     //         << id_keypoint_xyzt_vector[id-1][j].back().z << ", " 
                     //         << id_keypoint_xyzt_vector[id-1][j].back().time << ")\n";
-
+                }
+                // 평균 위치 계산
+                Point mean_xyz = calculate_average_point(id_keypoint_xyzt_vector[id-1]);
+                // 평균 속도 계산
+                Velocity mean_velocity = calculate_average_velocity(id_keypoint_velocity_vector[id-1]);
+                // 충돌 시간 및 거리 계산
+                std::vector<float> time_distance = find_closest_time_distance(mean_xyz, mean_velocity);
+                // Risk score 계산
+                if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
+                    RiskScore risk;
+                    risk.id = id;
+                    risk.collision_time = time_distance[0];
+                    risk.distance = time_distance[1];
+                    risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
+                    risk.risk_score = risk.velocity / risk.distance * 1000000 / risk.collision_time;
+                    risk_list.push_back(risk);
+                    printf("id: %d, risk_score: %f\n", risk.id, risk.risk_score);
+                    printf("collision time: %f, distance: %f, velocity: %f\n", risk.collision_time, risk.distance, risk.velocity);
                 }
                 return;
                 
