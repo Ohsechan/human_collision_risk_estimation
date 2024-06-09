@@ -1,2 +1,1 @@
-# RiskScore[] scores
-int32 scores
+RiskScore[] scores

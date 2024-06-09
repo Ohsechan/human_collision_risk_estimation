@@ -1,5 +1,5 @@
-int32 id
-float32 risk_score
-float32 collision_time
-float32 distance
-float32 velocity
+int64 id
+float64 risk_score
+float64 collision_time
+float64 distance
+float64 velocity
