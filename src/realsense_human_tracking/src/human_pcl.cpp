@@ -1,7 +1,7 @@
 
 #include "rclcpp/rclcpp.hpp"
-// #include "realsense_human_tracking/msg/risk.hpp"
-// #include "realsense_human_tracking/msg/risk_score_array.hpp"
+#include "realsense_human_tracking/msg/risk_score.hpp"
+#include "realsense_human_tracking/msg/risk_score_array.hpp"
 
 #include "sensor_msgs/msg/image.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -49,51 +49,6 @@ struct RiskScore {
     float risk_score = 0, collision_time=0, distance=0, velocity = 0;
 };
 
-// 통계적인 방법으로 Outlier 제거
-void removeOutliers(cv::Mat& mat) {
-    // 평균과 표준 편차 계산
-    cv::Scalar mean, stddev;
-    cv::Mat nonZeroMask = (mat != 0);
-    cv::meanStdDev(mat, mean, stddev, nonZeroMask);
-
-    float now_std = stddev[0];
-    float threshold = 33.0;// 10 / pow(mean[0], 1.0 / 5.0);
-    
-    // for (int i = 0; i < iteration; i++) {
-    while(true) {
-        nonZeroMask = (mat != 0);
-        cv::meanStdDev(mat, mean, stddev, nonZeroMask);
-
-        if (now_std - stddev[0] <= now_std * 0.0001){
-            threshold *= 0.9;
-        }
-
-        now_std = stddev[0];
-
-        // Z-score를 계산하고, 임계값 이상인 값을 0으로 설정
-        mat.forEach<float>([&](float& pixel, const int* position) -> void {
-            double zScore = (pixel - mean[0]) / stddev[0];
-            if (std::abs(zScore) > threshold) {
-                pixel = 0.0;
-            }
-        });
-        if (now_std < std::pow(mean[0], 1.27) / 11.6){
-            break;
-        }
-    }
-    nonZeroMask = (mat != 0);
-    cv::meanStdDev(mat, mean, stddev, nonZeroMask);
-    // printf("mean : %f, stddev : %f, goal : %f, thres : %f\n", mean[0], stddev[0], std::pow(mean[0], 1.27) / 10.5, threshold);
-}
-
-// segmentation mask 부분의 depth data만 필터링하는 함수
-cv::Mat human_filter(cv::Mat depth_image_, cv::Mat mat_human){
-    cv::Mat result;
-    mat_human.convertTo(mat_human, CV_32F);
-    cv::multiply(depth_image_, mat_human, result);
-    return result;
-}
-
 // Node 정의
 class DistNode : public rclcpp::Node {
     public:
@@ -119,7 +74,9 @@ class DistNode : public rclcpp::Node {
                 10,
                 std::bind(&DistNode::segCallback, this, std::placeholders::_1)
             );
-            xyzt_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/xyzt_meter_millisec", 10);
+            risk_score_array_publisher_ = this->create_publisher<realsense_human_tracking::msg::RiskScoreArray>(
+                "/risk_score_array",
+                10);
         }
 
     private:
@@ -128,36 +85,34 @@ class DistNode : public rclcpp::Node {
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_subscription_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_subscription_;
         rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr seg_subscription_;
-        rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr xyzt_publisher_;
+        rclcpp::Publisher<realsense_human_tracking::msg::RiskScoreArray>::SharedPtr risk_score_array_publisher_;
         cv_bridge::CvImagePtr cv_ptr;
         cv::Mat color_image_;
         cv::Mat depth_image_;
         std::deque<cv::Mat> depth_image_deque;
         std::deque<int> depth_image_time_stamp_deque;
         std::deque<Point> xyzt_deque;
-        std::vector<RiskScore> risk_list;
         std::vector<std::vector<std::deque<Point>>> id_keypoint_xyzt_vector;
         std::vector<std::vector<std::deque<Velocity>>> id_keypoint_velocity_vector;
         rs2_intrinsics intrinsics;
         int now_time = 0;
         std::vector<float> flight_time, cycle_time;
         int now_time2 = 0;
-        std::vector<int> processTime; // for calculate process time
+        std::vector<unsigned long long> processTime; // for calculate process time
 
-        void calc_processtime(int now_time_input) {
-            processTime.push_back((this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
-            if (processTime.size() == 1000){
+        void calc_processtime(unsigned long long now_time_input) {
+            processTime.push_back(this->now().nanoseconds() % 1000000000000 - now_time_input); // 12자리수, 단위: ns
+            if (processTime.size() == 1050){
                 const std::string filename = "processTime.txt";
                 std::ofstream outFile(filename);
                 if (!outFile.is_open()) {
                     std::cerr << "파일을 열 수 없습니다." << std::endl;
                     return;
                 }
-                for (const auto& value : processTime) {
-                    outFile << value << std::endl;
+                for (auto it = processTime.begin() + 50; it != processTime.end(); ++it) {
+                    outFile << *it << std::endl;
                 }
                 outFile.close();
-                printf("%dms\n", (this->now().nanoseconds() / 1000000) % 1000000000 - now_time_input);
             }
         }
 
@@ -257,7 +212,7 @@ class DistNode : public rclcpp::Node {
         }
 
         // color image를 color_image_ 변수에 저장하는 함수
-        void colorImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
+        void colorImageCallback(const std::shared_ptr<const sensor_msgs::msg::Image> msg) {
             color_image_.create(msg->height, msg->width, CV_8UC3);
             color_image_.data = const_cast<unsigned char *>(msg->data.data());
             color_image_.step = msg->step;
@@ -265,7 +220,7 @@ class DistNode : public rclcpp::Node {
         }
 
         // camera의 intrinsic parameter를 받아오는 함수
-        void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+        void cameraInfoCallback(const std::shared_ptr<const sensor_msgs::msg::CameraInfo> msg) {
             intrinsics.ppx = msg->k[2];
             intrinsics.ppy = msg->k[5];
             intrinsics.fx = msg->k[0];
@@ -278,7 +233,7 @@ class DistNode : public rclcpp::Node {
         }
 
         // depth data와 timestamp를 deque에 저장하는 함수
-        void depthImageCallback(const sensor_msgs::msg::Image::ConstPtr msg) {
+        void depthImageCallback(const std::shared_ptr<const sensor_msgs::msg::Image> msg) {
             cv_ptr = cv_bridge::toCvCopy(msg);
             depth_image_ = cv_ptr->image;
             depth_image_.convertTo(depth_image_, CV_32F);
@@ -298,16 +253,15 @@ class DistNode : public rclcpp::Node {
         }
 
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
-        void segCallback(const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
-            // int now_time3 = (this->now().nanoseconds() / 1000000) % 1000000000;
-            // calc_processtime(now_time3);
+        void segCallback(const std::shared_ptr<const std_msgs::msg::Int32MultiArray> msg) {
+            // unsigned long long now_time3 = this->now().nanoseconds() % 1000000000000; // 12자리, 단위: ns <todo: 시간 계산용>
             if (depth_image_.rows <= 0) {
                 return;
             }
             std::vector<int> tmp = msg->data;
             const int sync_time = tmp[0];
             const int len = 35; // 1(id) + 34(keypoints.xy)
-            const int count = (tmp.size() - 1) / len;
+            const size_t count = (tmp.size() - 1) / len;
 
             // keypoints data have to synchronize with depth image
             while(!depth_image_time_stamp_deque.empty() && sync_time - depth_image_time_stamp_deque.front() > 0){
@@ -326,10 +280,15 @@ class DistNode : public rclcpp::Node {
             depth_image_deque.pop_front();
             depth_image_time_stamp_deque.pop_front();
 
+            // 각 사람의 risk_score를 저장하여 publish할 msg
+            auto risk_score_array_msg = std::make_shared<realsense_human_tracking::msg::RiskScoreArray>();
+            // publish할 정보가 있는지 여부
+            bool have_data_for_publish = false;
+
             // 각 id마다 새로운 xyzt 정보 추가
             for (size_t i = 0; i < count; i++) {
                 // id 값 구하기
-                int id = tmp[ 1 + len * i ];
+                size_t id = tmp[ 1 + len * i ];
                 // id에 해당하는 저장공간 확보
                 while (id_keypoint_xyzt_vector.size() < id){
                     id_keypoint_xyzt_vector.emplace_back(17);
@@ -372,7 +331,7 @@ class DistNode : public rclcpp::Node {
                         //         << id_keypoint_velocity_vector[id-1][j].back().vz << ", " 
                         //         << id_keypoint_velocity_vector[id-1][j].back().time << ")\n";
                     }
-                    // 새로운 xyzt 데이터 추가 <todo: x, y deprojection 이후의 단위 알아보기>
+                    // 새로운 xyzt 데이터 추가
                     id_keypoint_xyzt_vector[id-1][j].push_back(new_point);
                     // // 확인을 위해 최근 Point 출력
                     // std::cout << "Point: (" 
@@ -389,16 +348,21 @@ class DistNode : public rclcpp::Node {
                 std::vector<float> time_distance = find_closest_time_distance(mean_xyz, mean_velocity);
                 // Risk score 계산
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
-                    RiskScore risk;
+                    realsense_human_tracking::msg::RiskScore risk;
                     risk.id = id;
                     risk.collision_time = time_distance[0];
                     risk.distance = time_distance[1];
                     risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                     risk.risk_score = risk.velocity / risk.distance * 1000000 / risk.collision_time;
-                    risk_list.push_back(risk);
-                    printf("id: %d, risk_score: %f\n", risk.id, risk.risk_score);
-                    printf("collision time: %f, distance: %f, velocity: %f\n", risk.collision_time, risk.distance, risk.velocity);
+                    risk_score_array_msg->scores.push_back(risk);
+                    have_data_for_publish = true;
+                    // std::cout <<"id: " << risk.id << ", risk_score: " << risk.risk_score << "\n";
+                    // std::cout <<"collision time: " << risk.collision_time << ", distance: " << risk.distance << ", velocity: " << risk.velocity << "\n";
                 }
+            }
+            if (have_data_for_publish) {
+                risk_score_array_publisher_->publish(*risk_score_array_msg);
+                // calc_processtime(now_time3); // <todo: 시간 계산용>
             }
         }
 };
