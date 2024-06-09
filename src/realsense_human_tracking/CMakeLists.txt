@@ -10,27 +10,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(pcl_conversions REQUIRED)
-find_package(PCL REQUIRED)
-#find_package(realsense2 REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 
-find_package(rosidl_default_generators REQUIRED)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/RiskScore.msg"
-  "msg/RiskScoreArray.msg"
-)
-
-ament_export_dependencies(rosidl_default_runtime)
-
-include_directories(${PCL_INCLUDE_DIRS} include)
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
@@ -50,35 +35,31 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-add_executable(human_pcl src/human_pcl.cpp)
-target_link_libraries( human_pcl
-  ${PCL_LIBRARIES}
+find_package(realsense_human_tracking REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/RiskScore.msg"
+  "msg/RiskScoreArray.msg"
 )
+
+add_executable(human_pcl src/human_pcl.cpp)
 ament_target_dependencies( human_pcl
+  realsense_human_tracking
   rclcpp
   std_msgs
   sensor_msgs
   OpenCV
   cv_bridge
-  rosidl_default_generators
 )
 add_executable(color_image src/color_image.cpp)
 ament_target_dependencies(color_image rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
-add_executable(pcl_visualizer_demo src/pcl_visualizer_demo.cpp)
-target_link_libraries( pcl_visualizer_demo ${PCL_LIBRARIES})
 add_executable(testing src/test.cpp)
 ament_target_dependencies(testing rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
-add_executable (cluster_extraction src/cluster_extraction.cpp)
-target_link_libraries (cluster_extraction ${PCL_LIBRARIES})
-add_executable (pcd_concatenation src/pcd_concatenation.cpp)
-target_link_libraries (pcd_concatenation ${PCL_LIBRARIES})
 
 install(TARGETS
  human_pcl
  color_image
- pcl_visualizer_demo
- cluster_extraction
- pcd_concatenation
  testing
  DESTINATION lib/${PROJECT_NAME}
 )
