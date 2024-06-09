@@ -6,7 +6,6 @@ from cv_bridge import CvBridge
 import numpy as np
 import cv2
 from ultralytics import YOLO
-from tensorflow import keras
 import torch
 import torch.nn as nn
 
@@ -63,6 +62,7 @@ loaded_model.eval()
 
 frame_keypoints_xyn = [[]] # id별로 keypoints 저장하는 공간 (id, stack, keypoints)
 
+processtime = []
 
 class DetectLSTMSegNode(Node):
     def __init__(self):
@@ -86,6 +86,22 @@ class DetectLSTMSegNode(Node):
         self.cv_bridge = CvBridge()
         self.model = YOLO('yolov8n-pose.pt')
 
+    def calcualte_processtime(self, now_time):
+        if (len(processtime) <= 1050): # todo: 실행시간 계산용
+            processtime.append(self.get_clock().now().nanoseconds - now_time)
+        if (len(processtime) == 1050):
+            data_array = np.array(processtime[50:])
+            mean = np.mean(data_array)
+            median = np.median(data_array)
+            std_dev = np.std(data_array)
+            min_value = np.min(data_array)
+            max_value = np.max(data_array)
+            print(f'Mean: {mean}')
+            print(f'Median: {median}')
+            print(f'Standard Deviation: {std_dev}')
+            print(f'Min: {min_value}')
+            print(f'Max: {max_value}')
+
     def color_image_callback(self, msg):
         color_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
@@ -94,15 +110,14 @@ class DetectLSTMSegNode(Node):
                     verbose=False, # no print
                     imgsz=(480,640), device="cuda:0")
         
-        cv2.imshow("YOLOv8 Tracking", results[0].plot()) # show result
-        cv2.waitKey(1)
-        # for i in results[0].keypoints.xy:
-        #     print(i)
-        # print()
+        # yolo 적용 여부 확인용
+        # cv2.imshow("YOLOv8 Tracking", results[0].plot()) # show result
+        # cv2.waitKey(1)
 
         id_keypionts = [] # for publish bounding box
         for person in results[0]:
             try:
+                # now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
                 keypoints = person.keypoints
                 xyn = keypoints.xyn.cpu().numpy()
                 xyn_list = xyn.tolist()
@@ -146,7 +161,8 @@ class DetectLSTMSegNode(Node):
 
                         # 예측 결과 출력
                         # print("LSTM 모델 예측 결과 (클래스 확률):", class_probabilities_numpy)
-                        if (class_probabilities_numpy[0][1] < 0.6).any(): # sit
+                        if (0): # todo: 실험용 코드이므로 삭제할 것
+                        # if (class_probabilities_numpy[0][1] < 0.6).any(): # sit
                             xykey = Int32MultiArray()
                             xykey.data = [0] # 'sit'
                             # print("sit")
@@ -155,7 +171,7 @@ class DetectLSTMSegNode(Node):
                             xykey.data = [(msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000] + id_keypionts
                             '''
                             xykey format description
-                                time stamp (millisecond),
+                                color image time stamp (millisecond),
                                 id, keypoints.xy,
                                 id, keypoints.xy,
                                 id, keypoints.xy,
@@ -163,9 +179,12 @@ class DetectLSTMSegNode(Node):
                             '''
                             self.seg_publisher.publish(xykey)
                             # print("stand")
-
+                
+                # self.calcualte_processtime(now_time) # todo: 실행시간 계산용
+                
             except IndexError as e :
                 continue
+            
 
 def main(args=None):
     rclpy.init(args=args)
