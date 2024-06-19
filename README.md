@@ -33,7 +33,7 @@
 ## 3. 실행 방법
 
 <pre><code># Turn on the realsense camera
-ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30 enable_sync:=true align_depth.enable:=true
+ros2 launch realsense2_camera rs_launch.py camera_namespace:=AMR camera_name:=D435i depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30 enable_sync:=true align_depth.enable:=true
 # Human pose estimation LSTM + Seg
 ros2 run depth_example lstm_seg_node
 # Danger index calculation
