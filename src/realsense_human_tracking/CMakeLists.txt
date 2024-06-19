@@ -41,6 +41,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RiskScore.msg"
   "msg/RiskScoreArray.msg"
+  "msg/PoseTracking.msg"
+  "msg/PoseTrackingArray.msg"
 )
 
 add_executable(human_pcl src/human_pcl.cpp)
@@ -52,15 +54,9 @@ ament_target_dependencies( human_pcl
   OpenCV
   cv_bridge
 )
-add_executable(color_image src/color_image.cpp)
-ament_target_dependencies(color_image rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
-add_executable(testing src/test.cpp)
-ament_target_dependencies(testing rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
 
 install(TARGETS
  human_pcl
- color_image
- testing
  DESTINATION lib/${PROJECT_NAME}
 )
 

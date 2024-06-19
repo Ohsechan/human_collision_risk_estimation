@@ -2,6 +2,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "realsense_human_tracking/msg/risk_score.hpp"
 #include "realsense_human_tracking/msg/risk_score_array.hpp"
+#include "realsense_human_tracking/msg/pose_tracking.hpp"
+#include "realsense_human_tracking/msg/pose_tracking_array.hpp"
 
 #include "sensor_msgs/msg/image.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -18,9 +20,9 @@
 #include <fstream>
 
 // Parameters
-const int OLD_DATA_REFERENCE_TIME = 1000; // Unit: ms
-const int COLLISION_REFERENCE_TIME = 10000; // Unit: ms
-const int COLLISION_REFERENCE_DISTANCE = 1000; // Unit: mm
+const int OLD_DATA_REFERENCE_TIME       = 500;      // Unit: ms
+const int COLLISION_REFERENCE_TIME      = 10000;    // Unit: ms
+const int COLLISION_REFERENCE_DISTANCE  = 1000;     // Unit: mm
 
 // Realsesne depth camera의 내부 파라미터 구조
 struct rs2_intrinsics {
@@ -43,39 +45,33 @@ struct Velocity {
     int time=0;
 };
 
-// Risk score
-struct RiskScore {
-    int id=0;
-    float risk_score = 0, collision_time=0, distance=0, velocity = 0;
-};
-
 // Node 정의
 class DistNode : public rclcpp::Node {
     public:
         // publisher 및 subscriber 정의
-        DistNode() : Node("dist_node") {
+        DistNode() : Node("risk_estimation_node") {
             camera_info_subscriber_ = create_subscription<sensor_msgs::msg::CameraInfo>(
-                "/camera/depth/camera_info",
+                "/AMR/D435i/aligned_depth_to_color/camera_info",
                 10,
                 std::bind(&DistNode::cameraInfoCallback, this, std::placeholders::_1)
             );
             depth_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
-                "/camera/aligned_depth_to_color/image_raw",
+                "/AMR/D435i/aligned_depth_to_color/image_raw",
                 10,
                 std::bind(&DistNode::depthImageCallback, this, std::placeholders::_1)
             );
             color_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
-                "/camera/color/image_raw",
+                "/AMR/D435i/color/image_raw",
                 10,
                 std::bind(&DistNode::colorImageCallback, this, std::placeholders::_1)
             );
-            seg_subscription_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
-                "/person_seg_tracking",
+            pose_tracking_data_subscription_ = this->create_subscription<realsense_human_tracking::msg::PoseTrackingArray>(
+                "/image_processing/pose_tracking",
                 10,
                 std::bind(&DistNode::segCallback, this, std::placeholders::_1)
             );
             risk_score_array_publisher_ = this->create_publisher<realsense_human_tracking::msg::RiskScoreArray>(
-                "/risk_score_array",
+                "/risk_estimation/risk_score_array",
                 10);
         }
 
@@ -84,14 +80,13 @@ class DistNode : public rclcpp::Node {
         rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_subscriber_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_subscription_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_subscription_;
-        rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr seg_subscription_;
+        rclcpp::Subscription<realsense_human_tracking::msg::PoseTrackingArray>::SharedPtr pose_tracking_data_subscription_;
         rclcpp::Publisher<realsense_human_tracking::msg::RiskScoreArray>::SharedPtr risk_score_array_publisher_;
         cv_bridge::CvImagePtr cv_ptr;
         cv::Mat color_image_;
         cv::Mat depth_image_;
         std::deque<cv::Mat> depth_image_deque;
         std::deque<int> depth_image_time_stamp_deque;
-        std::deque<Point> xyzt_deque;
         std::vector<std::vector<std::deque<Point>>> id_keypoint_xyzt_vector;
         std::vector<std::vector<std::deque<Velocity>>> id_keypoint_velocity_vector;
         rs2_intrinsics intrinsics;
@@ -99,6 +94,7 @@ class DistNode : public rclcpp::Node {
         std::vector<float> flight_time, cycle_time;
         int now_time2 = 0;
         std::vector<unsigned long long> processTime; // for calculate process time
+        std::vector<int> total_processTime; // for calculate process time
 
         void calc_processtime(unsigned long long now_time_input) {
             processTime.push_back(this->now().nanoseconds() % 1000000000000 - now_time_input); // 12자리수, 단위: ns
@@ -110,6 +106,22 @@ class DistNode : public rclcpp::Node {
                     return;
                 }
                 for (auto it = processTime.begin() + 50; it != processTime.end(); ++it) {
+                    outFile << *it << std::endl;
+                }
+                outFile.close();
+            }
+        }
+
+        void calc_total_processtime(int sync_time) {
+            total_processTime.push_back((this->now().nanoseconds()/1000000)%1000000000 - sync_time); // 12자리수, 단위: ns
+            if (total_processTime.size() == 1050){
+                const std::string filename = "total_processTime.txt";
+                std::ofstream outFile(filename);
+                if (!outFile.is_open()) {
+                    std::cerr << "파일을 열 수 없습니다." << std::endl;
+                    return;
+                }
+                for (auto it = total_processTime.begin() + 50; it != total_processTime.end(); ++it) {
                     outFile << *it << std::endl;
                 }
                 outFile.close();
@@ -253,23 +265,18 @@ class DistNode : public rclcpp::Node {
         }
 
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
-        void segCallback(const std::shared_ptr<const std_msgs::msg::Int32MultiArray> msg) {
+        void segCallback(const std::shared_ptr<const realsense_human_tracking::msg::PoseTrackingArray> msg) {
             // unsigned long long now_time3 = this->now().nanoseconds() % 1000000000000; // 12자리, 단위: ns <todo: 시간 계산용>
             if (depth_image_.rows <= 0) {
                 return;
             }
-            std::vector<int> tmp = msg->data;
-            const int sync_time = tmp[0];
-            const int len = 35; // 1(id) + 34(keypoints.xy)
-            const size_t count = (tmp.size() - 1) / len;
+            const int sync_time = msg->timestamp;
 
             // keypoints data have to synchronize with depth image
             while(!depth_image_time_stamp_deque.empty() && sync_time - depth_image_time_stamp_deque.front() > 0){
-                // printf("Erased!\n");
                 depth_image_deque.pop_front();
                 depth_image_time_stamp_deque.pop_front();
             }
-
             // fail when depth_image_time_stamp_deque is empty
             if (depth_image_time_stamp_deque.empty()) {
                 return;
@@ -285,10 +292,12 @@ class DistNode : public rclcpp::Node {
             // publish할 정보가 있는지 여부
             bool have_data_for_publish = false;
 
+            // calc_processtime(now_time3); // <todo: 시간 계산용>
+
             // 각 id마다 새로운 xyzt 정보 추가
-            for (size_t i = 0; i < count; i++) {
+            for (size_t i = 0; i < msg->posetracking.size(); i++) {
                 // id 값 구하기
-                size_t id = tmp[ 1 + len * i ];
+                size_t id = msg->posetracking[i].id;
                 // id에 해당하는 저장공간 확보
                 while (id_keypoint_xyzt_vector.size() < id){
                     id_keypoint_xyzt_vector.emplace_back(17);
@@ -300,17 +309,17 @@ class DistNode : public rclcpp::Node {
                 for (int j = 0; j < 17; j++) {
                     // OLD_DATA_REFERENCE_TIME ms 이상 차이나는 데이터 삭제하기
                     while (!id_keypoint_xyzt_vector[id-1][j].empty() && sync_time - id_keypoint_xyzt_vector[id-1][j].front().time > OLD_DATA_REFERENCE_TIME) {
-                        // printf("Ereased: %dms, %d left\n", sync_time - id_keypoint_xyzt_vector[id-1][j].front().time, id_keypoint_xyzt_vector[id-1][j].size());
                         id_keypoint_xyzt_vector[id-1][j].pop_front();
                     }
                     while (!id_keypoint_velocity_vector[id-1][j].empty() && sync_time - id_keypoint_velocity_vector[id-1][j].front().time > OLD_DATA_REFERENCE_TIME) {
                         id_keypoint_velocity_vector[id-1][j].pop_front();
                     }
+
                     // pixel 좌표 가져오기
-                    int x = tmp[ 2 + len * i + j * 2], y = tmp[ 3 + len * i + j * 2];
+                    int x = msg->posetracking[i].x[j], y = msg->posetracking[i].y[j];
 
                     // keypoint가 있는지 체크
-                    if ( x < 0 || y < 0 ) {
+                    if ( x <= 0 || y <= 0 ) {
                         continue;
                     }
                     // depth가 있는지 체크
@@ -350,10 +359,14 @@ class DistNode : public rclcpp::Node {
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
                     realsense_human_tracking::msg::RiskScore risk;
                     risk.id = id;
+                    risk.pose = msg->posetracking[i].pose;
                     risk.collision_time = time_distance[0];
                     risk.distance = time_distance[1];
                     risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                     risk.risk_score = risk.velocity / risk.distance * 1000000 / risk.collision_time;
+                    if (risk.pose) {
+                        risk.risk_score *= 2;
+                    }
                     risk_score_array_msg->scores.push_back(risk);
                     have_data_for_publish = true;
                     // std::cout <<"id: " << risk.id << ", risk_score: " << risk.risk_score << "\n";
@@ -362,7 +375,8 @@ class DistNode : public rclcpp::Node {
             }
             if (have_data_for_publish) {
                 risk_score_array_publisher_->publish(*risk_score_array_msg);
-                // calc_processtime(now_time3); // <todo: 시간 계산용>
+                // 
+                // calc_total_processtime(sync_time);
             }
         }
 };
