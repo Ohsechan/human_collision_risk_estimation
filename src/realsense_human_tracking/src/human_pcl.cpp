@@ -46,29 +46,29 @@ struct Velocity {
 };
 
 // Node 정의
-class DistNode : public rclcpp::Node {
+class RiskEstimationNode : public rclcpp::Node {
     public:
         // publisher 및 subscriber 정의
-        DistNode() : Node("risk_estimation_node") {
+        RiskEstimationNode() : Node("risk_estimation_node") {
             camera_info_subscriber_ = create_subscription<sensor_msgs::msg::CameraInfo>(
                 "/AMR/D435i/aligned_depth_to_color/camera_info",
                 10,
-                std::bind(&DistNode::cameraInfoCallback, this, std::placeholders::_1)
+                std::bind(&RiskEstimationNode::cameraInfoCallback, this, std::placeholders::_1)
             );
             depth_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
                 "/AMR/D435i/aligned_depth_to_color/image_raw",
                 10,
-                std::bind(&DistNode::depthImageCallback, this, std::placeholders::_1)
+                std::bind(&RiskEstimationNode::depthImageCallback, this, std::placeholders::_1)
             );
             color_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
                 "/AMR/D435i/color/image_raw",
                 10,
-                std::bind(&DistNode::colorImageCallback, this, std::placeholders::_1)
+                std::bind(&RiskEstimationNode::colorImageCallback, this, std::placeholders::_1)
             );
             pose_tracking_data_subscription_ = this->create_subscription<realsense_human_tracking::msg::PoseTrackingArray>(
                 "/image_processing/pose_tracking",
                 10,
-                std::bind(&DistNode::segCallback, this, std::placeholders::_1)
+                std::bind(&RiskEstimationNode::segCallback, this, std::placeholders::_1)
             );
             risk_score_array_publisher_ = this->create_publisher<realsense_human_tracking::msg::RiskScoreArray>(
                 "/risk_estimation/risk_score_array",
@@ -384,7 +384,7 @@ class DistNode : public rclcpp::Node {
 // 노드 활성화
 int main(int argc, char *argv[]) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<DistNode>());
+    rclcpp::spin(std::make_shared<RiskEstimationNode>());
     rclcpp::shutdown();
     return 0;
 }
