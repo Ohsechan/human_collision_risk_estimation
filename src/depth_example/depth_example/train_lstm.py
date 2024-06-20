@@ -17,13 +17,6 @@ random_seed = 53
 import time
 start_time = time.time()
 
-if os.path.exists('lstm_model.keras'):
-    os.remove('lstm_model.keras')
-if os.path.exists('confusion_matrix_high_res.png'):
-    os.remove('confusion_matrix_high_res.png')
-if os.path.exists('Training_and_validation.png'):
-    os.remove('Training_and_validation.png')
-
 yolo_model = YOLO('/home/ohbuntu22/human_collision_risk_estimation/yolov8n-pose.pt')
 workspace = '/home/ohbuntu22/human_collision_risk_estimation/src/depth_example/dataset_action_split'
 
@@ -88,10 +81,10 @@ def build_lstm_model(num_features):
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
-    # Fully connected layer
-    model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))
+    # # Fully connected layer
+    # model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
+    # model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
 
     # # Fully connected layer
     # model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
@@ -99,12 +92,12 @@ def build_lstm_model(num_features):
     # model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
@@ -183,6 +176,13 @@ ax2.grid(True)
 
 plt.tight_layout()
 plt.savefig('Training_and_validation.png', dpi=400)
+
+if os.path.exists('lstm_model.keras'):
+    os.remove('lstm_model.keras')
+if os.path.exists('confusion_matrix_high_res.png'):
+    os.remove('confusion_matrix_high_res.png')
+if os.path.exists('Training_and_validation.png'):
+    os.remove('Training_and_validation.png')
 
 # 모델 저장 (Keras 기본 형식 사용)
 save_model(model, 'lstm_model.keras')

@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 from tensorflow.keras.models import load_model
-from realsense_human_tracking.msg import PoseTracking, PoseTrackingArray
+from hcre_msgs.msg import PoseTracking, PoseTrackingArray
 
 frame_keypoints_xyn = [[]] # id별로 keypoints 저장하는 공간 (id, stack, keypoints)
 

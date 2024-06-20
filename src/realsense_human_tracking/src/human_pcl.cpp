@@ -1,9 +1,9 @@
 
 #include "rclcpp/rclcpp.hpp"
-#include "realsense_human_tracking/msg/risk_score.hpp"
-#include "realsense_human_tracking/msg/risk_score_array.hpp"
-#include "realsense_human_tracking/msg/pose_tracking.hpp"
-#include "realsense_human_tracking/msg/pose_tracking_array.hpp"
+#include "hcre_msgs/msg/risk_score.hpp"
+#include "hcre_msgs/msg/risk_score_array.hpp"
+#include "hcre_msgs/msg/pose_tracking.hpp"
+#include "hcre_msgs/msg/pose_tracking_array.hpp"
 
 #include "sensor_msgs/msg/image.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -33,13 +33,13 @@ struct rs2_intrinsics {
     float         coeffs[5]; /**< Distortion coefficients */
 };
 
-// location 및 timestamp
+// Position & timestamp
 struct Point {
     float x=0, y=0, z=0;
     int time=0;
 };
 
-// 속도
+// Velocity & timestamp
 struct Velocity {
     float vx=0, vy=0, vz=0;
     int time=0;
@@ -65,12 +65,12 @@ class RiskEstimationNode : public rclcpp::Node {
                 10,
                 std::bind(&RiskEstimationNode::colorImageCallback, this, std::placeholders::_1)
             );
-            pose_tracking_data_subscription_ = this->create_subscription<realsense_human_tracking::msg::PoseTrackingArray>(
+            pose_tracking_data_subscription_ = this->create_subscription<hcre_msgs::msg::PoseTrackingArray>(
                 "/image_processing/pose_tracking",
                 10,
                 std::bind(&RiskEstimationNode::segCallback, this, std::placeholders::_1)
             );
-            risk_score_array_publisher_ = this->create_publisher<realsense_human_tracking::msg::RiskScoreArray>(
+            risk_score_array_publisher_ = this->create_publisher<hcre_msgs::msg::RiskScoreArray>(
                 "/risk_estimation/risk_score_array",
                 10);
         }
@@ -80,8 +80,8 @@ class RiskEstimationNode : public rclcpp::Node {
         rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_subscriber_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_subscription_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_subscription_;
-        rclcpp::Subscription<realsense_human_tracking::msg::PoseTrackingArray>::SharedPtr pose_tracking_data_subscription_;
-        rclcpp::Publisher<realsense_human_tracking::msg::RiskScoreArray>::SharedPtr risk_score_array_publisher_;
+        rclcpp::Subscription<hcre_msgs::msg::PoseTrackingArray>::SharedPtr pose_tracking_data_subscription_;
+        rclcpp::Publisher<hcre_msgs::msg::RiskScoreArray>::SharedPtr risk_score_array_publisher_;
         cv_bridge::CvImagePtr cv_ptr;
         cv::Mat color_image_;
         cv::Mat depth_image_;
@@ -265,7 +265,7 @@ class RiskEstimationNode : public rclcpp::Node {
         }
 
         // segmentation 데이터가 발행될 때마다 사람의 위치, 속도, 가속도, 다음 위치를 예측하는 함수
-        void segCallback(const std::shared_ptr<const realsense_human_tracking::msg::PoseTrackingArray> msg) {
+        void segCallback(const std::shared_ptr<const hcre_msgs::msg::PoseTrackingArray> msg) {
             // unsigned long long now_time3 = this->now().nanoseconds() % 1000000000000; // 12자리, 단위: ns <todo: 시간 계산용>
             if (depth_image_.rows <= 0) {
                 return;
@@ -288,9 +288,7 @@ class RiskEstimationNode : public rclcpp::Node {
             depth_image_time_stamp_deque.pop_front();
 
             // 각 사람의 risk_score를 저장하여 publish할 msg
-            auto risk_score_array_msg = std::make_shared<realsense_human_tracking::msg::RiskScoreArray>();
-            // publish할 정보가 있는지 여부
-            bool have_data_for_publish = false;
+            auto risk_score_array_msg = std::make_shared<hcre_msgs::msg::RiskScoreArray>();
 
             // calc_processtime(now_time3); // <todo: 시간 계산용>
 
@@ -356,28 +354,27 @@ class RiskEstimationNode : public rclcpp::Node {
                 // 충돌 시간 및 거리 계산
                 std::vector<float> time_distance = find_closest_time_distance(mean_xyz, mean_velocity);
                 // Risk score 계산
+                hcre_msgs::msg::RiskScore risk;
+                risk.id = id;
+                risk.pose = msg->posetracking[i].pose;
+                risk.collision_time = time_distance[0];
+                risk.distance = time_distance[1];
+                risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
-                    realsense_human_tracking::msg::RiskScore risk;
-                    risk.id = id;
-                    risk.pose = msg->posetracking[i].pose;
-                    risk.collision_time = time_distance[0];
-                    risk.distance = time_distance[1];
-                    risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                     risk.risk_score = risk.velocity / risk.distance * 1000000 / risk.collision_time;
                     if (risk.pose) {
                         risk.risk_score *= 2;
                     }
                     risk_score_array_msg->scores.push_back(risk);
-                    have_data_for_publish = true;
-                    // std::cout <<"id: " << risk.id << ", risk_score: " << risk.risk_score << "\n";
-                    // std::cout <<"collision time: " << risk.collision_time << ", distance: " << risk.distance << ", velocity: " << risk.velocity << "\n";
                 }
+                else {
+                    risk.risk_score = 0;
+                }
+                // std::cout <<"id: " << risk.id << ", risk_score: " << risk.risk_score << "\n";
+                // std::cout <<"collision time: " << risk.collision_time << ", distance: " << risk.distance << ", velocity: " << risk.velocity << "\n";
             }
-            if (have_data_for_publish) {
-                risk_score_array_publisher_->publish(*risk_score_array_msg);
-                // 
-                // calc_total_processtime(sync_time);
-            }
+            risk_score_array_publisher_->publish(*risk_score_array_msg);
+            // calc_total_processtime(sync_time);
         }
 };
 
