@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(realsense_human_tracking)
+project(risk_estimation)
 
 # Default to C++14
 #if(NOT CMAKE_CXX_STANDARD)
@@ -37,8 +37,8 @@ if(BUILD_TESTING)
 endif()
 
 
-add_executable(human_pcl src/human_pcl.cpp)
-ament_target_dependencies( human_pcl
+add_executable(risk_estimation_node src/risk_estimation_node.cpp)
+ament_target_dependencies( risk_estimation_node
   hcre_msgs
   rclcpp
   std_msgs
@@ -48,7 +48,7 @@ ament_target_dependencies( human_pcl
 )
 
 install(TARGETS
- human_pcl
+ risk_estimation_node
  DESTINATION lib/${PROJECT_NAME}
 )
 
