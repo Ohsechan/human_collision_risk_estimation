@@ -81,20 +81,20 @@ def build_lstm_model(num_features):
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
-    # # Fully connected layer
-    # model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
+    # Fully connected layer
+    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
 
-    # # Fully connected layer
-    # model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
+    # Fully connected layer
+    model.add(Dense(1024, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
 
-    # # Fully connected layer
-    # model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
+    # Fully connected layer
+    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
 
     # Fully connected layer
     model.add(Dense(16, activation='relu', kernel_regularizer=l2(0.01)))
@@ -132,7 +132,7 @@ model = build_lstm_model(num_features)
 
 # Callbacks for early stopping and learning rate reduction
 early_stopping = EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=True)
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=7, min_lr=0.0001)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=10, min_lr=0.0001)
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=500, batch_size=1024, callbacks=[early_stopping, reduce_lr], verbose=0)
 
 train_accuracy = history.history['accuracy'][-1]
@@ -168,14 +168,13 @@ ax2.legend()
 ax2.grid(True)
 
 plt.tight_layout()
-plt.savefig('Training_and_validation.png', dpi=400)
-
 if os.path.exists('lstm_model.keras'):
     os.remove('lstm_model.keras')
 if os.path.exists('confusion_matrix_high_res.png'):
     os.remove('confusion_matrix_high_res.png')
 if os.path.exists('Training_and_validation.png'):
     os.remove('Training_and_validation.png')
+plt.savefig('Training_and_validation.png', dpi=400)
 
 # 모델 저장 (Keras 기본 형식 사용)
 save_model(model, 'lstm_model.keras')
