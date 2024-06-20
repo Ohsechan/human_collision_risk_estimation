@@ -5,12 +5,85 @@ from cv_bridge import CvBridge
 import numpy as np
 import cv2
 from ultralytics import YOLO
-from tensorflow.keras.models import load_model
 from hcre_msgs.msg import PoseTracking, PoseTrackingArray
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import os
+from ament_index_python.packages import get_package_prefix
+
+def find_package_path(package_name):
+    package_path = get_package_prefix(package_name)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.join(package_path, "src", package_name)
+    return package_path
+
+package_path = find_package_path('image_processing')
 
 frame_keypoints_xyn = [[]] # id별로 keypoints 저장하는 공간 (id, stack, keypoints)
 
 processtime = []
+
+class LSTMModel(nn.Module):
+    def __init__(self, num_features = 34):
+        super(LSTMModel, self).__init__()
+        self.lstm = nn.LSTM(num_features, 64, batch_first=True)
+        self.batch_norm1 = nn.BatchNorm1d(64)
+        self.dropout1 = nn.Dropout(0.2)
+
+        self.fc1 = nn.Linear(64, 128)
+        self.batch_norm2 = nn.BatchNorm1d(128)
+        self.dropout2 = nn.Dropout(0.2)
+
+        self.fc2 = nn.Linear(128, 512)
+        self.batch_norm3 = nn.BatchNorm1d(512)
+        self.dropout3 = nn.Dropout(0.2)
+
+        self.fc3 = nn.Linear(512, 128)
+        self.batch_norm4 = nn.BatchNorm1d(128)
+        self.dropout4 = nn.Dropout(0.2)
+
+        self.fc4 = nn.Linear(128, 64)
+        self.batch_norm5 = nn.BatchNorm1d(64)
+        self.dropout5 = nn.Dropout(0.2)
+
+        self.fc5 = nn.Linear(64, 4)
+        self.batch_norm6 = nn.BatchNorm1d(4)
+        self.dropout6 = nn.Dropout(0.2)
+
+        self.fc6 = nn.Linear(4, 1)
+
+    def forward(self, x):
+        x, _ = self.lstm(x)
+        x = x[:, -1, :]  # Take the last output of LSTM
+
+        x = self.batch_norm1(x)
+        x = self.dropout1(x)
+
+        x = F.relu(self.fc1(x))
+        x = self.batch_norm2(x)
+        x = self.dropout2(x)
+
+        # x = F.relu(self.fc2(x))
+        # x = self.batch_norm3(x)
+        # x = self.dropout3(x)
+
+        # x = F.relu(self.fc3(x))
+        # x = self.batch_norm4(x)
+        # x = self.dropout4(x)
+
+        x = F.relu(self.fc4(x))
+        x = self.batch_norm5(x)
+        x = self.dropout5(x)
+
+        x = F.relu(self.fc5(x))
+        x = self.batch_norm6(x)
+        x = self.dropout6(x)
+
+        x = torch.sigmoid(self.fc6(x))
+        return x
 
 class ImageProcessingNode(Node):
     def __init__(self):
@@ -27,8 +100,10 @@ class ImageProcessingNode(Node):
             10
         )
         self.cv_bridge = CvBridge()
-        self.model = YOLO('yolov8n-pose.pt')
-        self.lstm_model = load_model('lstm_model.keras')
+        self.model = YOLO(os.path.join(package_path,'models','yolov8n-pose.pt'))
+        self.lstm_model = LSTMModel()
+        lstm_model_path = os.path.join(package_path,'models','lstm_model.pth')
+        self.lstm_model.load_state_dict(torch.load(lstm_model_path))
 
     def calcualte_processtime(self, now_time):
         if (len(processtime) <= 1050):
@@ -62,7 +137,7 @@ class ImageProcessingNode(Node):
         pose_tracking_data.timestamp = (msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000
         id_keypionts = [] # to publish keypoints
         for person in results[0]: # for every person
-            # now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
+            now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
             each_pose = PoseTracking()
 
             keypoints = person.keypoints
@@ -97,17 +172,17 @@ class ImageProcessingNode(Node):
 
             # LSTM 모델을 사용하여 예측
             if len(frame_keypoints_xyn[id-1]) > 0:
-                input_data = np.array(frame_keypoints_xyn[id-1])
-                input_data = np.expand_dims(input_data, axis=0) # (1, sequence_length, input_size)
-
-                y_pred_prob = self.lstm_model.predict(input_data, verbose=0)
-                y_pred = (y_pred_prob > 0.5).astype(int)[0][0]
-
+                input_data = torch.tensor(frame_keypoints_xyn[id-1])
+                input_data = input_data.unsqueeze(0) # (1, sequence_length, input_size)
+                self.lstm_model.eval()
+                y_pred_prob = self.lstm_model(input_data)
+                y_pred = (y_pred_prob.item() > 0.5)
+                
                 if y_pred == 0:
                     each_pose.pose = False # sit
 
             pose_tracking_data.posetracking.append(each_pose)
-            # self.calcualte_processtime(now_time) # todo: 실행시간 계산용
+            self.calcualte_processtime(now_time) # todo: 실행시간 계산용
         '''
         pose tracking format description
             time stamp (millisecond),

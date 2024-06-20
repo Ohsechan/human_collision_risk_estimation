@@ -11,14 +11,23 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.regularizers import l2
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
+from ament_index_python.packages import get_package_prefix
+
+def find_package_path(package_name):
+    package_path = get_package_prefix(package_name)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.join(package_path, "src", package_name)
+    return package_path
 
 random_seed = 53
 
 import time
 start_time = time.time()
 
-yolo_model = YOLO('/home/ohbuntu22/human_collision_risk_estimation/yolov8n-pose.pt')
-workspace = '/home/ohbuntu22/human_collision_risk_estimation/src/image_processing/dataset_action_split'
+package_path = find_package_path('image_processing')
+yolo_model = YOLO(os.path.join(package_path,'models','yolov8n-pose.pt'))
+workspace = os.path.join(package_path, 'dataset_action_split')
 
 def extract_keypoints(color_image):
     xyn_list = yolo_model.predict(color_image,
@@ -41,13 +50,13 @@ def create_whole_sequence(video_path):
     cap.release()
     return sequence
 
-def create_regular_sequences(whole_sequence, seq_length=5, skip=2):
+def create_regular_sequences(whole_sequence, seq_length=10, skip=2):
     sequences = []
     for i in range(0, len(whole_sequence) - seq_length + 1, skip):
         sequences.append(whole_sequence[i:i + seq_length])
     return sequences
 
-def load_data(label_0, label_1, seq_length=5, skip=2):
+def load_data(label_0, label_1, seq_length=10, skip=2):
     X, y = [], []
     for middle_path in label_0:
         each_path = os.path.join(workspace, middle_path)
@@ -82,22 +91,17 @@ def build_lstm_model(num_features):
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(1024, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(32, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))
-
-    # Fully connected layer
-    model.add(Dense(16, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(4, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
@@ -107,15 +111,16 @@ def build_lstm_model(num_features):
     model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
     return model
 
-if os.path.exists('features.npz'):
-    data = np.load('features.npz')
+feature_path = os.path.join(package_path,'models','features.npz')
+if os.path.exists(feature_path):
+    data = np.load(feature_path)
     X = data['X']
     y = data['y']
 else:
     train_label_0 = ['train/Sit down', 'train/Sitting', 'train/Lying Down', 'test/Sit down', 'test/Sitting', 'test/Lying Down']
     train_label_1 = ['train/Stand up', 'train/Standing', 'train/Walking', 'test/Stand up', 'test/Standing', 'test/Walking']
     X, y = load_data(train_label_0, train_label_1)
-    np.savez_compressed('features.npz', X=X, y=y)
+    np.savez_compressed(feature_path, X=X, y=y)
 
 # Split data -> train : val : test = 3 : 1 : 1
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=random_seed)
@@ -132,7 +137,7 @@ model = build_lstm_model(num_features)
 
 # Callbacks for early stopping and learning rate reduction
 early_stopping = EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=True)
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=10, min_lr=0.0001)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=3, min_lr=0.0001)
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=500, batch_size=1024, callbacks=[early_stopping, reduce_lr], verbose=0)
 
 train_accuracy = history.history['accuracy'][-1]
@@ -168,19 +173,22 @@ ax2.legend()
 ax2.grid(True)
 
 plt.tight_layout()
-if os.path.exists('lstm_model.keras'):
-    os.remove('lstm_model.keras')
-if os.path.exists('confusion_matrix_high_res.png'):
-    os.remove('confusion_matrix_high_res.png')
-if os.path.exists('Training_and_validation.png'):
-    os.remove('Training_and_validation.png')
-plt.savefig('Training_and_validation.png', dpi=400)
+lstm_model_path = os.path.join(package_path,'models','lstm_model.keras')
+plot_path = os.path.join(package_path,'models','confusion_matrix_high_res.png')
+cm_path = os.path.join(package_path,'models','Training_and_validation.png')
+if os.path.exists(lstm_model_path):
+    os.remove(lstm_model_path)
+if os.path.exists(plot_path):
+    os.remove(plot_path)
+if os.path.exists(cm_path):
+    os.remove(cm_path)
+plt.savefig(cm_path, dpi=400)
 
 # 모델 저장 (Keras 기본 형식 사용)
-save_model(model, 'lstm_model.keras')
+save_model(model, lstm_model_path)
 
 # 모델 불러오기
-loaded_model = load_model('lstm_model.keras')
+loaded_model = load_model(lstm_model_path)
 
 # 모델 평가
 y_pred_prob = loaded_model.predict(X_test, verbose=0)
@@ -192,7 +200,7 @@ disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['sit', 'stand
 fig, ax = plt.subplots(figsize=(10, 10))
 disp.plot(cmap=plt.cm.Blues, ax=ax)
 plt.title('Confusion Matrix')
-plt.savefig('confusion_matrix_high_res.png', dpi=400)
+plt.savefig(plot_path, dpi=400)
 
 # Precision, Recall, F1 Score 계산
 precision = precision_score(y_test, y_pred)
