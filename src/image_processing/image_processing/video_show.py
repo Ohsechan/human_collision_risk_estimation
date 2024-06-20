@@ -25,7 +25,7 @@ def play_video(video_path):
 
 # avi 파일 경로
 video_path = '\
-/home/ohbuntu22/human_collision_risk_estimation/src/depth_example/dataset_action_split/train/Fall Down/video_6.avi\
+/home/ohbuntu22/human_collision_risk_estimation/src/image_processing/dataset_action_split/train/Fall Down/video_6.avi\
 '
 
 # 비디오 재생 함수 호출

@@ -77,24 +77,24 @@ def build_lstm_model(num_features):
     model = Sequential()
     model.add(Input(shape=(None, num_features)))
     
-    model.add(LSTM(128, return_sequences=False, kernel_regularizer=l2(0.01)))
+    model.add(LSTM(64, return_sequences=False, kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
-    # Fully connected layer
-    model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))
+    # # Fully connected layer
+    # model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
+    # model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
 
-    # Fully connected layer
-    model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))
+    # # Fully connected layer
+    # model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
+    # model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
 
-    # Fully connected layer
-    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))
+    # # Fully connected layer
+    # model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
+    # model.add(BatchNormalization())
+    # model.add(Dropout(0.2))
 
     # Fully connected layer
     model.add(Dense(16, activation='relu', kernel_regularizer=l2(0.01)))
@@ -117,10 +117,8 @@ else:
     X, y = load_data(train_label_0, train_label_1)
     np.savez_compressed('features.npz', X=X, y=y)
 
-# Split the data into train+val and test
+# Split data -> train : val : test = 3 : 1 : 1
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=random_seed)
-
-# Split the train+val into train and val
 X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=random_seed)
 
 # # Sizes of the splits
@@ -133,8 +131,8 @@ num_samples, seq_length, num_features = X.shape
 model = build_lstm_model(num_features)
 
 # Callbacks for early stopping and learning rate reduction
-early_stopping = EarlyStopping(monitor='val_loss', patience=100, restore_best_weights=True)
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=10, min_lr=0.00001)
+early_stopping = EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=True)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=7, min_lr=0.0001)
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=500, batch_size=1024, callbacks=[early_stopping, reduce_lr], verbose=0)
 
 train_accuracy = history.history['accuracy'][-1]

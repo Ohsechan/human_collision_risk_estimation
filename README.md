@@ -37,7 +37,7 @@ ros2 launch realsense2_camera rs_launch.py camera_namespace:=AMR camera_name:=D4
 # Human pose estimation LSTM + Seg
 ros2 run image_processing image_processing_node
 # Danger index calculation
-ros2 run realsense_human_tracking human_pcl
+ros2 run risk_estimation risk_estimation_node
 </code></pre>
 
 ## 4. 문서
