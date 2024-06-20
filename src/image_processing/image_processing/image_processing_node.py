@@ -60,7 +60,7 @@ class ImageProcessingNode(Node):
 
         pose_tracking_data = PoseTrackingArray()
         pose_tracking_data.timestamp = (msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000
-        id_keypionts = [] # for publish keypoints
+        id_keypionts = [] # to publish keypoints
         for person in results[0]: # for every person
             # now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
             each_pose = PoseTracking()
