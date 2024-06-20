@@ -357,21 +357,23 @@ class RiskEstimationNode : public rclcpp::Node {
                 hcre_msgs::msg::RiskScore risk;
                 risk.id = id;
                 risk.pose = msg->posetracking[i].pose;
-                risk.collision_time = time_distance[0];
-                risk.distance = time_distance[1];
                 risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
-                    risk.risk_score = risk.velocity / risk.distance * 1000000 / risk.collision_time;
+                    risk.time_to_collision = time_distance[0];
+                    risk.minimum_distance = time_distance[1];
+                    risk.risk_score = risk.velocity / risk.minimum_distance * 1000000 / risk.time_to_collision;
                     if (risk.pose) {
                         risk.risk_score *= 2;
                     }
-                    risk_score_array_msg->scores.push_back(risk);
                 }
                 else {
+                    risk.time_to_collision = 0;
+                    risk.minimum_distance = std::sqrt(mean_xyz.x * mean_xyz.x + mean_xyz.y * mean_xyz.y + mean_xyz.z * mean_xyz.z);
                     risk.risk_score = 0;
                 }
+                risk_score_array_msg->scores.push_back(risk);
                 // std::cout <<"id: " << risk.id << ", risk_score: " << risk.risk_score << "\n";
-                // std::cout <<"collision time: " << risk.collision_time << ", distance: " << risk.distance << ", velocity: " << risk.velocity << "\n";
+                // std::cout <<"collision time: " << risk.time_to_collision << ", distance: " << risk.minimum_distance << ", velocity: " << risk.velocity << "\n";
             }
             risk_score_array_publisher_->publish(*risk_score_array_msg);
             // calc_total_processtime(sync_time);

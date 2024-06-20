@@ -18,7 +18,7 @@ import time
 start_time = time.time()
 
 yolo_model = YOLO('/home/ohbuntu22/human_collision_risk_estimation/yolov8n-pose.pt')
-workspace = '/home/ohbuntu22/human_collision_risk_estimation/src/depth_example/dataset_action_split'
+workspace = '/home/ohbuntu22/human_collision_risk_estimation/src/image_processing/dataset_action_split'
 
 def extract_keypoints(color_image):
     xyn_list = yolo_model.predict(color_image,
@@ -77,19 +77,9 @@ def build_lstm_model(num_features):
     model = Sequential()
     model.add(Input(shape=(None, num_features)))
     
-    model.add(LSTM(64, return_sequences=False, kernel_regularizer=l2(0.01)))
+    model.add(LSTM(128, return_sequences=False, kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
-
-    # # Fully connected layer
-    # model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
-
-    # # Fully connected layer
-    # model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
 
     # Fully connected layer
     model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
@@ -97,12 +87,17 @@ def build_lstm_model(num_features):
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(8, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(256, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+
+    # Fully connected layer
+    model.add(Dense(16, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
@@ -112,15 +107,15 @@ def build_lstm_model(num_features):
     model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
     return model
 
-if os.path.exists('X_feature.npy'):
-    X = np.load('X_feature.npy')
-    y = np.load('y_label.npy')
+if os.path.exists('features.npz'):
+    data = np.load('features.npz')
+    X = data['X']
+    y = data['y']
 else:
     train_label_0 = ['train/Sit down', 'train/Sitting', 'train/Lying Down', 'test/Sit down', 'test/Sitting', 'test/Lying Down']
     train_label_1 = ['train/Stand up', 'train/Standing', 'train/Walking', 'test/Stand up', 'test/Standing', 'test/Walking']
     X, y = load_data(train_label_0, train_label_1)
-    np.save('X_feature.npy', X)
-    np.save('y_label.npy', y)
+    np.savez_compressed('features.npz', X=X, y=y)
 
 # Split the data into train+val and test
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=random_seed)

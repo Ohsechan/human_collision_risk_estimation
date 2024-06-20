@@ -56,8 +56,8 @@ class ImageProcessingNode(Node):
                     imgsz=(480,640), device="cuda:0")
         
         # yolo 적용 여부 확인용
-        cv2.imshow("YOLOv8 Tracking", results[0].plot()) # show result
-        cv2.waitKey(1)
+        # cv2.imshow("YOLOv8 Tracking", results[0].plot()) # show result
+        # cv2.waitKey(1)
 
         pose_tracking_data = PoseTrackingArray()
         pose_tracking_data.timestamp = (msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000
