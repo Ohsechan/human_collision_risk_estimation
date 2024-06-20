@@ -64,8 +64,8 @@ def load_data(label_0, label_1, seq_length=5, skip=2):
             regular_sequences = create_regular_sequences(whole_sequence, seq_length, skip)
             X.extend(regular_sequences)
             y.extend([0] * len(regular_sequences))
-    # seq_len_0 = len(y)
-    # print("seq_len_0:", seq_len_0)
+    seq_len_0 = len(y)
+    print("seq_len_0:", seq_len_0)
 
     for middle_path in label_1:
         each_path = os.path.join(workspace, middle_path)
@@ -75,8 +75,8 @@ def load_data(label_0, label_1, seq_length=5, skip=2):
             regular_sequences = create_regular_sequences(whole_sequence, seq_length, skip)
             X.extend(regular_sequences)
             y.extend([1] * len(regular_sequences))
-    # seq_len_1 = len(y) - seq_len_0
-    # print("seq_len_1:", seq_len_1)
+    seq_len_1 = len(y) - seq_len_0
+    print("seq_len_1:", seq_len_1)
 
     return np.array(X), np.array(y)
 
@@ -88,30 +88,30 @@ def build_lstm_model(num_features):
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
-    # # Fully connected layer
-    # model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
-
     # Fully connected layer
     model.add(Dense(512, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
     # # Fully connected layer
-    # model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
+    # model.add(Dense(64, activation='relu', kernel_regularizer=l2(0.01)))
     # model.add(BatchNormalization())
-    # model.add(Dropout(0.3))
+    # model.add(Dropout(0.2))
 
     # Fully connected layer
-    model.add(Dense(32, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(Dense(2048, activation='relu', kernel_regularizer=l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
 
-    # # Fully connected layer
-    # model.add(Dense(4, activation='relu', kernel_regularizer=l2(0.01)))
-    # model.add(BatchNormalization())
-    # model.add(Dropout(0.2))
+    # Fully connected layer
+    model.add(Dense(128, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+
+    # Fully connected layer
+    model.add(Dense(8, activation='relu', kernel_regularizer=l2(0.01)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
 
     # Output layer
     model.add(Dense(1, activation='sigmoid'))
@@ -119,26 +119,34 @@ def build_lstm_model(num_features):
     model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
     return model
 
-if os.path.exists('train_X.npy'):
-    X = np.load('train_X.npy')
-    y = np.load('train_y.npy')
+if os.path.exists('X_feature.npy'):
+    X = np.load('X_feature.npy')
+    y = np.load('y_label.npy')
 else:
-    train_label_0 = ['train/Sit down', 'train/Sitting', 'train/Lying Down']
-    train_label_1 = ['train/Stand up', 'train/Standing', 'train/Walking']
+    train_label_0 = ['train/Sit down', 'train/Sitting', 'train/Lying Down', 'test/Sit down', 'test/Sitting', 'test/Lying Down']
+    train_label_1 = ['train/Stand up', 'train/Standing', 'train/Walking', 'test/Stand up', 'test/Standing', 'test/Walking']
     X, y = load_data(train_label_0, train_label_1)
-    np.save('train_X.npy', X)
-    np.save('train_y.npy', y)
+    np.save('X_feature.npy', X)
+    np.save('y_label.npy', y)
 
-num_samples, seq_length, num_features = X.shape
+# Split the data into train+val and test
+X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=random_seed)
+
+# Split the train+val into train and val
+X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=random_seed)
+
+# # Sizes of the splits
+# print(f"Train size: {len(X_train)}")
+# print(f"Validation size: {len(X_val)}")
+# print(f"Test size: {len(X_test)}")
 
 # Build and train the LSTM model
+num_samples, seq_length, num_features = X.shape
 model = build_lstm_model(num_features)
 
 # Callbacks for early stopping and learning rate reduction
 early_stopping = EarlyStopping(monitor='val_loss', patience=100, restore_best_weights=True)
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=10, min_lr=0.00001)
-
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=random_seed)
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=500, batch_size=1024, callbacks=[early_stopping, reduce_lr], verbose=0)
 
 train_accuracy = history.history['accuracy'][-1]
@@ -179,48 +187,25 @@ plt.savefig('Training_and_validation.png', dpi=400)
 # 모델 저장 (Keras 기본 형식 사용)
 save_model(model, 'lstm_model.keras')
 
-
-
-
-
-
-
-
-
 # 모델 불러오기
 loaded_model = load_model('lstm_model.keras')
-# loaded_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-if os.path.exists('test_X.npy'):
-    X = np.load('test_X.npy')
-    y = np.load('test_y.npy')
-else:
-    test_label_0 = ['test/Sit down', 'test/Sitting', 'test/Lying Down']
-    test_label_1 = ['test/Stand up', 'test/Standing', 'test/Walking']
-
-    # Load the data
-    X, y = load_data(test_label_0, test_label_1)
-    np.save('test_X.npy', X)
-    np.save('test_y.npy', y)
 
 # 모델 평가
-y_pred_prob = loaded_model.predict(X, verbose=0)
+y_pred_prob = loaded_model.predict(X_test, verbose=0)
 y_pred = (y_pred_prob > 0.5).astype(int)
 
-# 혼동 행렬 계산
-cm = confusion_matrix(y, y_pred)
+# confusion matrix
+cm = confusion_matrix(y_test, y_pred)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['sit', 'stand'])
-
-# 혼동 행렬 시각화
 fig, ax = plt.subplots(figsize=(10, 10))
 disp.plot(cmap=plt.cm.Blues, ax=ax)
 plt.title('Confusion Matrix')
 plt.savefig('confusion_matrix_high_res.png', dpi=400)
 
 # Precision, Recall, F1 Score 계산
-precision = precision_score(y, y_pred)
-recall = recall_score(y, y_pred)
-f1 = f1_score(y, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
 
 # 결과 출력
 print(f'Precision: {precision:.8f}')
@@ -228,7 +213,7 @@ print(f'Recall: {recall:.8f}')
 print(f'F1 Score: {f1:.8f}')
 
 # Evaluate the model
-loss, accuracy = loaded_model.evaluate(X, y, verbose=0)
+loss, accuracy = loaded_model.evaluate(X_test, y_test, verbose=0)
 print(f'Model accuracy: {accuracy * 100:.2f}%')
 
 elapsed_time = time.time() - start_time
