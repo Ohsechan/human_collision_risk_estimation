@@ -60,11 +60,6 @@ class RiskEstimationNode : public rclcpp::Node {
                 10,
                 std::bind(&RiskEstimationNode::depthImageCallback, this, std::placeholders::_1)
             );
-            color_subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
-                "/AMR/D435i/color/image_raw",
-                10,
-                std::bind(&RiskEstimationNode::colorImageCallback, this, std::placeholders::_1)
-            );
             pose_tracking_data_subscription_ = this->create_subscription<hcre_msgs::msg::PoseTrackingArray>(
                 "/image_processing/pose_tracking",
                 10,
@@ -83,7 +78,6 @@ class RiskEstimationNode : public rclcpp::Node {
         rclcpp::Subscription<hcre_msgs::msg::PoseTrackingArray>::SharedPtr pose_tracking_data_subscription_;
         rclcpp::Publisher<hcre_msgs::msg::RiskScoreArray>::SharedPtr risk_score_array_publisher_;
         cv_bridge::CvImagePtr cv_ptr;
-        cv::Mat color_image_;
         cv::Mat depth_image_;
         std::deque<cv::Mat> depth_image_deque;
         std::deque<int> depth_image_time_stamp_deque;
@@ -223,14 +217,6 @@ class RiskEstimationNode : public rclcpp::Node {
             return {t, distance};
         }
 
-        // color image를 color_image_ 변수에 저장하는 함수
-        void colorImageCallback(const std::shared_ptr<const sensor_msgs::msg::Image> msg) {
-            color_image_.create(msg->height, msg->width, CV_8UC3);
-            color_image_.data = const_cast<unsigned char *>(msg->data.data());
-            color_image_.step = msg->step;
-            cv::cvtColor(color_image_, color_image_, cv::COLOR_RGB2BGR);
-        }
-
         // camera의 intrinsic parameter를 받아오는 함수
         void cameraInfoCallback(const std::shared_ptr<const sensor_msgs::msg::CameraInfo> msg) {
             intrinsics.ppx = msg->k[2];
@@ -359,16 +345,16 @@ class RiskEstimationNode : public rclcpp::Node {
                 risk.pose = msg->posetracking[i].pose;
                 risk.velocity = std::sqrt(mean_velocity.vx*mean_velocity.vx + mean_velocity.vy*mean_velocity.vy + mean_velocity.vz*mean_velocity.vz);
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
-                    risk.time_to_collision = time_distance[0];
-                    risk.minimum_distance = time_distance[1];
+                    risk.time_to_collision = time_distance[0] / 1000; // second
+                    risk.minimum_distance = time_distance[1] / 1000; // meter
                     risk.risk_score = risk.velocity / risk.minimum_distance * 1000000 / risk.time_to_collision;
                     if (risk.pose) {
                         risk.risk_score *= 2;
                     }
                 }
                 else {
-                    risk.time_to_collision = 0;
-                    risk.minimum_distance = std::sqrt(mean_xyz.x * mean_xyz.x + mean_xyz.y * mean_xyz.y + mean_xyz.z * mean_xyz.z);
+                    risk.time_to_collision = COLLISION_REFERENCE_TIME / 1000; // second
+                    risk.minimum_distance = std::sqrt(mean_xyz.x * mean_xyz.x + mean_xyz.y * mean_xyz.y + mean_xyz.z * mean_xyz.z) / 1000; // meter
                     risk.risk_score = 0;
                 }
                 risk_score_array_msg->scores.push_back(risk);
