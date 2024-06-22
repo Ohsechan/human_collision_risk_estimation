@@ -21,6 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'image_processing_node = image_processing.image_processing_node:main',
+            'train_lstm_pytorch = image_processing.train_lstm_pytorch:main',
+            'save_risk_score = image_processing.save_risk_score:main',
         ],
     },
 )
