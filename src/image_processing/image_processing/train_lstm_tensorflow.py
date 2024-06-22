@@ -174,7 +174,7 @@ ax2.grid(True)
 
 plt.tight_layout()
 lstm_model_path = os.path.join(package_path,'models','lstm_model.keras')
-plot_path = os.path.join(package_path,'models','confusion_matrix_high_res.png')
+plot_path = os.path.join(package_path,'models','confusion_matrix.png')
 cm_path = os.path.join(package_path,'models','Training_and_validation.png')
 if os.path.exists(lstm_model_path):
     os.remove(lstm_model_path)

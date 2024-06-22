@@ -33,27 +33,19 @@ class LSTMModel(nn.Module):
         self.batch_norm1 = nn.BatchNorm1d(64)
         self.dropout1 = nn.Dropout(0.2)
 
-        self.fc1 = nn.Linear(64, 128)
-        self.batch_norm2 = nn.BatchNorm1d(128)
+        self.fc1 = nn.Linear(64, 256)
+        self.batch_norm2 = nn.BatchNorm1d(256)
         self.dropout2 = nn.Dropout(0.2)
 
-        self.fc2 = nn.Linear(128, 512)
-        self.batch_norm3 = nn.BatchNorm1d(512)
+        self.fc2 = nn.Linear(256, 64)
+        self.batch_norm3 = nn.BatchNorm1d(64)
         self.dropout3 = nn.Dropout(0.2)
 
-        self.fc3 = nn.Linear(512, 128)
-        self.batch_norm4 = nn.BatchNorm1d(128)
+        self.fc3 = nn.Linear(64, 16)
+        self.batch_norm4 = nn.BatchNorm1d(16)
         self.dropout4 = nn.Dropout(0.2)
 
-        self.fc4 = nn.Linear(128, 64)
-        self.batch_norm5 = nn.BatchNorm1d(64)
-        self.dropout5 = nn.Dropout(0.2)
-
-        self.fc5 = nn.Linear(64, 4)
-        self.batch_norm6 = nn.BatchNorm1d(4)
-        self.dropout6 = nn.Dropout(0.2)
-
-        self.fc6 = nn.Linear(4, 1)
+        self.fc4 = nn.Linear(16, 1)
 
     def forward(self, x):
         x, _ = self.lstm(x)
@@ -66,23 +58,15 @@ class LSTMModel(nn.Module):
         x = self.batch_norm2(x)
         x = self.dropout2(x)
 
-        # x = F.relu(self.fc2(x))
-        # x = self.batch_norm3(x)
-        # x = self.dropout3(x)
+        x = F.relu(self.fc2(x))
+        x = self.batch_norm3(x)
+        x = self.dropout3(x)
 
-        # x = F.relu(self.fc3(x))
-        # x = self.batch_norm4(x)
-        # x = self.dropout4(x)
+        x = F.relu(self.fc3(x))
+        x = self.batch_norm4(x)
+        x = self.dropout4(x)
 
-        x = F.relu(self.fc4(x))
-        x = self.batch_norm5(x)
-        x = self.dropout5(x)
-
-        x = F.relu(self.fc5(x))
-        x = self.batch_norm6(x)
-        x = self.dropout6(x)
-
-        x = torch.sigmoid(self.fc6(x))
+        x = torch.sigmoid(self.fc4(x))
         return x
 
 class ImageProcessingNode(Node):
@@ -127,7 +111,7 @@ class ImageProcessingNode(Node):
         results = self.model.track(color_image,
                     persist=True, # persisting tracks between frames
                     verbose=False, # no print
-                    imgsz=(480,640), device="cuda:0")
+                    device="cuda:0")
         
         # yolo 적용 여부 확인용
         # cv2.imshow("YOLOv8 Tracking", results[0].plot()) # show result
@@ -137,7 +121,7 @@ class ImageProcessingNode(Node):
         pose_tracking_data.timestamp = (msg.header.stamp.sec % 1000000) * 1000 + msg.header.stamp.nanosec // 1000000
         id_keypionts = [] # to publish keypoints
         for person in results[0]: # for every person
-            now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
+            # now_time = self.get_clock().now().nanoseconds # todo: 실행시간 계산용
             each_pose = PoseTracking()
 
             keypoints = person.keypoints
@@ -182,7 +166,7 @@ class ImageProcessingNode(Node):
                     each_pose.pose = False # sit
 
             pose_tracking_data.posetracking.append(each_pose)
-            self.calcualte_processtime(now_time) # todo: 실행시간 계산용
+            # self.calcualte_processtime(now_time) # todo: 실행시간 계산용
         '''
         pose tracking format description
             time stamp (millisecond),
@@ -192,7 +176,6 @@ class ImageProcessingNode(Node):
             ...
         '''
         self.pose_tracking_data_publisher.publish(pose_tracking_data)
-            
 
 def main(args=None):
     rclpy.init(args=args)
