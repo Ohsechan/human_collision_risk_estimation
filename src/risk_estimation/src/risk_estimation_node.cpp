@@ -347,7 +347,7 @@ class RiskEstimationNode : public rclcpp::Node {
                 if ( 0 < time_distance[0] && time_distance[0] < COLLISION_REFERENCE_TIME && time_distance[1] < COLLISION_REFERENCE_DISTANCE ) {
                     risk.time_to_collision = time_distance[0] / 1000; // second
                     risk.minimum_distance = time_distance[1] / 1000; // meter
-                    risk.risk_score = risk.velocity / risk.minimum_distance * 1000000 / risk.time_to_collision;
+                    risk.risk_score = risk.velocity / risk.minimum_distance / risk.time_to_collision;
                     if (risk.pose) {
                         risk.risk_score *= 2;
                     }
