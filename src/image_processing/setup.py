@@ -23,6 +23,8 @@ setup(
             'image_processing_node = image_processing.image_processing_node:main',
             'train_lstm_pytorch = image_processing.train_lstm_pytorch:main',
             'save_risk_score = image_processing.save_risk_score:main',
+            'plot_risk_score = image_processing.plot_risk_score:main',
+            'dataset_statistics = image_processing.dataset_statistics:main',
         ],
     },
 )
