@@ -117,5 +117,9 @@ def plot_statistics(data):
     plt.subplots_adjust(hspace=0.5)
     fig.savefig(os.path.join(package_path, 'models', 'dataset_statistics.png'), dpi=400)
 
-data = analyze_dataset(dataset_path)
-plot_statistics(data)
+def main():
+    data = analyze_dataset(dataset_path)
+    plot_statistics(data)
+
+if __name__ == '__main__':
+    main()
