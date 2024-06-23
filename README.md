@@ -39,6 +39,3 @@ ros2 run image_processing image_processing_node
 # Danger index calculation
 ros2 run risk_estimation risk_estimation_node
 </code></pre>
-
-## 4. 문서
-https://docs.google.com/document/d/1YqBIqOUxnI7RKZ2SeHtM_VViJVNKV7SAQmxj7HR6lik/edit#heading=h.2gazcsgmxkub
