@@ -33,35 +33,38 @@ def plot_show():
     # risk_score
     axs[0].plot(risk_score, linestyle='-', color='r')
     axs[0].set_title('Risk Score')
-    axs[0].set_xlabel('Index')
+    axs[0].set_xlabel('Frame')
     axs[0].set_ylabel('Value')
     axs[0].grid(True)
 
     # time_to_collision
     axs[1].plot(time_to_collision, linestyle='-', color='b')
     axs[1].set_title('Time to Collision (seconds)')
-    axs[1].set_xlabel('Index')
+    axs[1].set_xlabel('Frame')
     axs[1].set_ylabel('Value')
     axs[1].grid(True)
 
     # minimum_distance
     axs[2].plot(minimum_distance, linestyle='-', color='g')
     axs[2].set_title('Minimum Distance (meters)')
-    axs[1].set_xlabel('Index')
-    axs[1].set_ylabel('Value')
+    axs[2].set_xlabel('Frame')
+    axs[2].set_ylabel('Value')
     axs[2].grid(True)
 
     # velocity
     axs[3].plot(velocity, linestyle='-', color='m')
     axs[3].set_title('Velocity (m/s)')
-    axs[3].set_xlabel('Index')
+    axs[3].set_xlabel('Frame')
     axs[3].set_ylabel('Value')
     axs[3].grid(True)
 
     # 레이아웃 조정
-    plt.subplots_adjust(hspace=0.5)
+    plt.subplots_adjust(hspace=0.8)
     plt.show()
-    fig.savefig(os.path.join(package_path, 'models', '_risk_score_plot.png'), dpi=400)
+    plot_path = os.path.join(package_path, 'models', '_risk_score_plot.png')
+    if os.path.exists(plot_path):
+        os.remove(plot_path)
+    fig.savefig(plot_path, dpi=400)
 
 def main(args=None):
     plot_show()

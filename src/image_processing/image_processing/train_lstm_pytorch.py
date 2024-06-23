@@ -133,7 +133,7 @@ def evaluate_model(model, X_test, y_test, plot_path):
 
         # confusion matrix
         cm = confusion_matrix(y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['sit', 'stand'])
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['0', '1'])
         fig, ax = plt.subplots(figsize=(10, 10))
         disp.plot(cmap=plt.cm.Blues, ax=ax)
         plt.title('Confusion Matrix')

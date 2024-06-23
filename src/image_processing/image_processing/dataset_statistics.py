@@ -4,6 +4,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ament_index_python.packages import get_package_prefix
 
+def find_package_path(package_name):
+    package_path = get_package_prefix(package_name)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.dirname(package_path)
+    package_path = os.path.join(package_path, "src", package_name)
+    return package_path
+
+package_path = find_package_path('image_processing')
+dataset_path = os.path.join(package_path, 'dataset_action_split')
+
 def get_video_info(video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -105,18 +115,7 @@ def plot_statistics(data):
     axes[2].set_xticklabels(categories_order, rotation=45, ha='right')
 
     plt.subplots_adjust(hspace=0.5)
-    plt.show()
+    fig.savefig(os.path.join(package_path, 'models', 'dataset_statistics.png'), dpi=400)
 
-def find_package_path(package_name):
-    package_path = get_package_prefix(package_name)
-    package_path = os.path.dirname(package_path)
-    package_path = os.path.dirname(package_path)
-    package_path = os.path.join(package_path, "src", package_name)
-    return package_path
-
-package_path = find_package_path('image_processing')
-dataset_path = os.path.join(package_path, 'dataset_action_split')
-
-# 분석 및 시각화 실행
 data = analyze_dataset(dataset_path)
 plot_statistics(data)

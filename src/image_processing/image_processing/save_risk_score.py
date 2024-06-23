@@ -32,35 +32,38 @@ def plot_show():
     # risk_score
     axs[0].plot(risk_score, linestyle='-', color='r')
     axs[0].set_title('Risk Score')
-    axs[0].set_xlabel('Index')
+    axs[0].set_xlabel('Frame')
     axs[0].set_ylabel('Value')
     axs[0].grid(True)
 
     # time_to_collision
     axs[1].plot(time_to_collision, linestyle='-', color='b')
     axs[1].set_title('Time to Collision (seconds)')
-    axs[1].set_xlabel('Index')
+    axs[1].set_xlabel('Frame')
     axs[1].set_ylabel('Value')
     axs[1].grid(True)
 
     # minimum_distance
     axs[2].plot(minimum_distance, linestyle='-', color='g')
     axs[2].set_title('Minimum Distance (meters)')
-    axs[1].set_xlabel('Index')
-    axs[1].set_ylabel('Value')
+    axs[2].set_xlabel('Frame')
+    axs[2].set_ylabel('Value')
     axs[2].grid(True)
 
     # velocity
     axs[3].plot(velocity, linestyle='-', color='m')
     axs[3].set_title('Velocity (m/s)')
-    axs[3].set_xlabel('Index')
+    axs[3].set_xlabel('Frame')
     axs[3].set_ylabel('Value')
     axs[3].grid(True)
 
     # 레이아웃 조정
-    plt.subplots_adjust(hspace=0.5)
+    plt.subplots_adjust(hspace=0.8)
     plt.show()
-    fig.savefig(os.path.join(package_path, 'models', '_risk_score_plot.png'), dpi=400)
+    plot_path = os.path.join(package_path, 'models', '_risk_score_plot.png')
+    if os.path.exists(plot_path):
+        os.remove(plot_path)
+    fig.savefig(plot_path, dpi=400)
 
 class RiskScoreListener(Node):
     def __init__(self):
@@ -75,21 +78,29 @@ class RiskScoreListener(Node):
     def risk_score_callback(self, msg):
         if len(msg.scores) == 0:
             return
-        if msg.scores[0].risk_score < 1:
-            tmp = msg.scores[0].risk_score
-        else:
-            tmp = np.log(msg.scores[0].risk_score)
-        risk_score.append(tmp)
+        risk_score.append(msg.scores[0].risk_score)
         time_to_collision.append(msg.scores[0].time_to_collision)
         minimum_distance.append(msg.scores[0].minimum_distance)
         velocity.append(msg.scores[0].velocity)
 
         if len(risk_score) == 1000:
             plot_show()
-            save_list(os.path.join(package_path, 'models', '_risk_score.pkl'), risk_score)
-            save_list(os.path.join(package_path, 'models', '_time_to_collision.pkl'), time_to_collision)
-            save_list(os.path.join(package_path, 'models', '_minimum_distance.pkl'), minimum_distance)
-            save_list(os.path.join(package_path, 'models', '_velocity.pkl'), velocity)
+            risk_score_path = os.path.join(package_path, 'models', '_risk_score.pkl')
+            time_to_collision_path = os.path.join(package_path, 'models', '_time_to_collision.pkl')
+            minimum_distance_path = os.path.join(package_path, 'models', '_minimum_distance.pkl')
+            velocity_path = os.path.join(package_path, 'models', '_velocity.pkl')
+            if os.path.exists(risk_score_path):
+                os.remove(risk_score_path)
+            if os.path.exists(time_to_collision_path):
+                os.remove(time_to_collision_path)
+            if os.path.exists(minimum_distance_path):
+                os.remove(minimum_distance_path)
+            if os.path.exists(velocity_path):
+                os.remove(velocity_path)
+            save_list(risk_score_path, risk_score)
+            save_list(time_to_collision_path, time_to_collision)
+            save_list(minimum_distance_path, minimum_distance)
+            save_list(velocity_path, velocity)
 
 def main(args=None):
     rclpy.init(args=args)
